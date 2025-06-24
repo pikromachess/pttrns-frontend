@@ -1,0 +1,189 @@
+.app {
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+}
+
+button:hover {  
+  background-color: #121214;
+}
+
+.main-content {
+  position: relative;
+  padding-top: calc(var(--safe-area-top) + 116px);
+  padding-bottom: calc(var(--safe-area-bottom) + 60px);
+  padding-left: calc(var(--safe-area-left));
+  padding-right: calc(var(--safe-area-right));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  box-sizing: border-box;
+  flex: 1;
+}
+
+#root {
+  max-width: 1280px;
+  margin: 0 auto;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.upper-bar {
+  position: fixed;
+  top: calc(0px);
+  right: calc(var(--safe-area-right));
+  left: calc(var(--safe-area-left));
+  z-index: 10;
+  background-color: #1c1c1c;
+  padding: 6px;
+  height: calc(var(--safe-area-top) + 98px);
+  width: auto;
+  border-bottom-right-radius: 24px;
+  border-bottom-left-radius: 24px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  transition: border-radius 0.3s ease;
+  -webkit-tap-highlight-color: transparent !important;
+}
+
+.player-expanded .upper-bar {
+  border-bottom-right-radius: 0px;
+  border-bottom-left-radius: 0px;
+}
+
+.search-container {
+  display: flex;
+  align-items: center;  
+}
+
+.search-container input {
+  user-select: text; /* Разрешаем выделение текста */
+  -webkit-user-select: text; /* Для Safari */
+  -moz-user-select: text; /* Для Firefox */
+  -ms-user-select: text; /* Для Edge */
+  cursor: text; /* Курсор для текстового ввода */
+}
+
+.tonConnectButton {
+  position: absolute; 
+  right: 6px;
+  padding-left: 6px;      
+}
+
+.go3974562317 {
+  box-shadow: none !important;  
+}
+
+
+.nav-bar {
+  position: fixed;
+  bottom: calc(var(--safe-area-bottom));
+  left: calc(var(--safe-area-left));
+  right: calc(var(--safe-area-right));
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  background-color: #1c1c1c;
+  /* border-top-right-radius: 24px;
+  border-top-left-radius: 24px; */
+  padding-bottom: 12px;
+  z-index: 10;
+  box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.nav-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: none;
+  border: none;
+  color: #ffffff;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 6px;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -khtml-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+.nav-button:hover {
+  color: #FFFFFF; 
+  background-color: #1c1c1c;
+}
+
+.nav-button:focus {
+  outline: none;
+}
+
+.nav-button:active {
+  outline: none;
+}
+
+.nav-icon {
+  width: 22px;
+  height: 22px;
+  margin-bottom: 3px;
+  fill: transparent;
+  stroke: currentColor;
+  stroke-width: 1.5;
+}
+
+.nav-button.active {
+  color: #2AABEE; /* Яркий голубой при ховере */
+}
+
+.logo {
+  height: 6em;
+  padding: 1.5em;
+  will-change: filter;
+  transition: filter 300ms;
+}
+
+.logo:hover {
+  filter: drop-shadow(0 0 2em #61DAFB); /* Яркий голубой для ховера логотипа */
+}
+
+.logo.react:hover {
+  filter: drop-shadow(0 0 2em #61DAFB); /* То же для React логотипа */
+}
+
+@keyframes logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  a:nth-of-type(2) .logo {
+    animation: logo-spin infinite 20s linear;
+  }
+}
+
+.card {
+  padding: 2em;
+}
+
+.read-the-docs {
+  color: #A3BFFA; /* Светло-голубой для текста */
+}
+
+.nav-button,
+.nav-button:focus,
+.nav-button:focus-visible,
+.nav-button:active {
+  outline: none !important;
+  -webkit-tap-highlight-color: transparent !important;
+}
