@@ -61,7 +61,7 @@ export function ProgressSlider({
     setDragProgress(newProgress);
   }, [isDragging, calculateProgress]);
 
-  const handleProgressEnd = useCallback((e?: MouseEvent | TouchEvent) => {
+  const handleProgressEnd = useCallback(() => {
     if (!isDragging || !dragStartRef.current) return;
     
     console.log('Progress drag end, seeking to:', dragProgress);
@@ -109,8 +109,8 @@ export function ProgressSlider({
       handleProgressMove(e);
     };
 
-    const handleGlobalEnd = (e: MouseEvent | TouchEvent) => {
-      handleProgressEnd(e);
+    const handleGlobalEnd = () => {
+      handleProgressEnd();
     };
 
     // Добавляем обработчики для мыши и касаний
