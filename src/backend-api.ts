@@ -3,7 +3,7 @@ import type { NFTResponse } from "./types/nft";
 
 export class BackendApi {
      
-    baseUrl = 'http://localhost:3000';
+    baseUrl = 'https://pttrns-backend-ts.vercel.app';
 
     async generatePayload(): Promise<string | undefined> {
         try {
