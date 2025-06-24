@@ -88,7 +88,7 @@ function Root() {
   }, []);
 
   return (
-    <TonConnectUIProvider manifestUrl="https://pikromachess-tma-patterns-47ab.twc1.net/tonconnect-manifest.json">
+    <TonConnectUIProvider manifestUrl="https://pikromachess-pttrns-frontend-dc0f.twc1.net/tonconnect-manifest.json">
       <BackendTokenContext.Provider value={{ token, setToken }}>
         <ProvideBackendAuth />
       <PlayerProvider>
