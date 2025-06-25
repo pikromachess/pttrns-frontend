@@ -1,3 +1,4 @@
+// src/components/NFTList/NFTList.styles.ts
 import type { CSSProperties } from 'react';
 
 export const nftListStyles: Record<string, CSSProperties> = {
@@ -33,7 +34,7 @@ export const nftListStyles: Record<string, CSSProperties> = {
     padding: '12px',
     marginBottom: '6px',
     borderRadius: '6px',
-    transition: 'background-color 0.2s',
+    transition: 'background-color 0.2s, border-color 0.2s',
     minHeight: '60px',
     touchAction: 'manipulation',
     userSelect: 'none',
@@ -77,6 +78,22 @@ export const nftListStyles: Record<string, CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: '4px',
+    zIndex: 2,
+  },
+
+  playingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    backgroundColor: 'rgba(42, 171, 238, 0.2)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: '4px',
+    backdropFilter: 'blur(1px)',
+    zIndex: 1,
   },
 
   spinner: {
@@ -101,6 +118,18 @@ export const nftListStyles: Record<string, CSSProperties> = {
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
     textAlign: 'left',
+    transition: 'color 0.2s',
+  },
+
+  titlePlaying: {
+    fontSize: '16px',
+    fontWeight: '600',
+    color: '#2AABEE',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    textAlign: 'left',
+    transition: 'color 0.2s',
   },
 
   subtitle: {
@@ -110,5 +139,16 @@ export const nftListStyles: Record<string, CSSProperties> = {
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
     textAlign: 'left',
+    transition: 'color 0.2s',
+  },
+
+  subtitlePlaying: {
+    fontSize: '14px',
+    color: 'rgba(42, 171, 238, 0.8)',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    textAlign: 'left',
+    transition: 'color 0.2s',
   },
 };

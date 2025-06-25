@@ -1,13 +1,15 @@
+// src/components/NFTList/NFTList.tsx
 import { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { usePlayer } from '../../contexts/PlayerContext';
 import { useNFTSearch } from '../../hooks/useNFTSearch';
 import { useMusicGeneration } from '../../hooks/useMusicGeneration';
+import { PlayingAnimation } from '../PlayingAnimation/PlayingAnimation';
 import type { NFTListProps } from '../../types/nft';
 import { nftListStyles } from './NFTList.styles';
 
 export function NFTList({ nfts, loading, error, searchQuery, sortBy }: NFTListProps) {
-  const { updatePlaylist } = usePlayer();
+  const { updatePlaylist, currentNft, isPlaying } = usePlayer();
   const { filteredNfts } = useNFTSearch(nfts, searchQuery, sortBy);
   const { generatingMusic, handleNftClick } = useMusicGeneration();
 
@@ -15,6 +17,13 @@ export function NFTList({ nfts, loading, error, searchQuery, sortBy }: NFTListPr
     console.log('Обновляем плейлист в плеере:', filteredNfts.length, 'треков');
     updatePlaylist(filteredNfts);
   }, [filteredNfts, updatePlaylist]);
+
+  // Функция для проверки, является ли NFT текущим воспроизводимым
+  const isCurrentNft = (nft: any) => {
+    if (!currentNft) return false;
+    return nft.address === currentNft.address || 
+           (nft.index === currentNft.index && !nft.address && !currentNft.address);
+  };
 
   if (loading) {
     return (
@@ -48,6 +57,7 @@ export function NFTList({ nfts, loading, error, searchQuery, sortBy }: NFTListPr
           const uniqueKey = `${nft.address || 'no-address'}-${nft.index || index}-${nft.collection?.address || 'no-collection'}`;
           const nftId = nft.address || `${nft.index}`;
           const isGenerating = generatingMusic === nftId;
+          const isCurrentPlaying = isCurrentNft(nft);
           
           return (
             <motion.div
@@ -59,17 +69,18 @@ export function NFTList({ nfts, loading, error, searchQuery, sortBy }: NFTListPr
               whileTap={{ scale: 0.98 }}
               style={{
                 ...nftListStyles.nftItem,
-                backgroundColor: isGenerating ? '#1a1a1a' : '#000',
+                backgroundColor: isCurrentPlaying ? '#1a1a1a' : (isGenerating ? '#1a1a1a' : '#000'),
                 cursor: isGenerating ? 'wait' : 'pointer',
                 opacity: isGenerating ? 0.7 : 1,
+                border: isCurrentPlaying ? '1px solid #2AABEE' : 'none',
               }}
               onMouseEnter={(e) => {
-                if (!isGenerating) {
+                if (!isGenerating && !isCurrentPlaying) {
                   e.currentTarget.style.backgroundColor = '#1c1c1c';
                 }
               }}
               onMouseLeave={(e) => {
-                if (!isGenerating) {
+                if (!isGenerating && !isCurrentPlaying) {
                   e.currentTarget.style.backgroundColor = '#000';
                 }
               }}
@@ -101,15 +112,27 @@ export function NFTList({ nfts, loading, error, searchQuery, sortBy }: NFTListPr
                     <div style={nftListStyles.spinner} />
                   </div>
                 )}
+
+                {/* Анимация воспроизведения */}
+                {isCurrentPlaying && !isGenerating && (
+                  <div style={nftListStyles.playingOverlay}>
+                    <PlayingAnimation 
+                      isPlaying={isPlaying} 
+                      size="medium" 
+                    />
+                  </div>
+                )}
               </div>
 
               <div style={nftListStyles.textContainer}>
-                <div style={nftListStyles.title}>
+                <div style={isCurrentPlaying ? nftListStyles.titlePlaying : nftListStyles.title}>
                   {nft.metadata?.name || `NFT #${nft.index || index + 1}`}
                 </div>
-                <div style={nftListStyles.subtitle}>
+                <div style={isCurrentPlaying ? nftListStyles.subtitlePlaying : nftListStyles.subtitle}>
                   {nft.collection?.name || 'Без коллекции'}
                   {isGenerating && ' • Генерация музыки...'}
+                  {isCurrentPlaying && isPlaying && ' • Воспроизводится'}
+                  {isCurrentPlaying && !isPlaying && ' • На паузе'}
                 </div>
               </div>
             </motion.div>
