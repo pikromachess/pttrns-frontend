@@ -24,6 +24,15 @@ export function usePlaylistManager(options: UsePlaylistManagerOptions = {}) {
   const [currentNft, setCurrentNft] = useState<NFT | null>(null);
 
   const updatePlaylist = useCallback((newPlaylist: NFT[], startNft?: NFT) => {
+    // Разрешаем пустой плейлист без предупреждения
+    if (newPlaylist.length === 0) {
+      setPlaylist([]);
+      setCurrentIndex(-1);
+      setCurrentNft(null);
+      onPlaylistUpdate?.([]);
+      return;
+    }
+
     if (!validatePlaylist(newPlaylist)) {
       console.warn('⚠️ Некорректный плейлист:', newPlaylist);
       return;
@@ -159,7 +168,6 @@ export function usePlaylistManager(options: UsePlaylistManagerOptions = {}) {
     if (playlist.length <= 1) return;
 
     const shuffled = [...playlist];
-    let startIndex = 0;
 
     if (keepCurrentFirst && currentNft) {
       // Удаляем текущий трек из массива для перемешивания

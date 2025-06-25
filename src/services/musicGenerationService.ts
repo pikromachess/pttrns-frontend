@@ -3,12 +3,7 @@ import type { NFT } from '../types/nft';
 import type { MusicGenerationRequest, MusicGenerationOptions, MusicApiKeyData } from '../types/musicApi';
 
 export class MusicGenerationService {
-  private apiKeyCache: {
-    key: string;
-    expiresAt: Date;
-    serverUrl: string;
-  } | null = null;
-
+  
   /**
    * Генерирует музыку для NFT
    */
@@ -222,8 +217,7 @@ export class MusicGenerationService {
   /**
    * Очистка ресурсов сервиса
    */
-  cleanup(): void {
-    this.apiKeyCache = null;
+  cleanup(): void {    
     console.log('🧹 Сервис генерации музыки очищен');
   }
 }

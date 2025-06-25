@@ -12,7 +12,7 @@ export interface MusicGenerationRequest {
 }
 
 export interface MusicGenerationOptions {
-  authToken: string;
+  authToken?: string;
   retryOnAuthError?: boolean;
   timeout?: number;
 }
@@ -28,4 +28,6 @@ export interface ListenTracker {
   markAsRecorded: (nft: NFT) => void;
   shouldRecord: (nft: NFT, currentTime: number, duration: number) => boolean;
   clear: () => void;
+  resetNft?: (nft: NFT) => void;
+  getStats?: () => any;
 }

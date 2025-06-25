@@ -26,6 +26,10 @@ export function useProgressTimer(options: UseProgressTimerOptions = {}) {
   const durationRef = useRef(180);
   const listenThresholdReachedRef = useRef(false);
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
+  
+  // Используем ref для колбэков, чтобы избежать пересоздания интервала
+  const callbacksRef = useRef(config);
+  callbacksRef.current = config;
 
   const cleanup = useCallback(() => {
     if (intervalRef.current) {
@@ -47,6 +51,7 @@ export function useProgressTimer(options: UseProgressTimerOptions = {}) {
     intervalRef.current = setInterval(() => {
       if (!isRunningRef.current) return;
 
+      const callbacks = callbacksRef.current; // Исправляем эту строку
       let currentTime: number;
       let duration: number;
 
@@ -60,7 +65,7 @@ export function useProgressTimer(options: UseProgressTimerOptions = {}) {
         durationRef.current = duration;
       } else {
         // Fallback режим без аудио элемента
-        currentTime = currentTimeRef.current + (config.updateInterval / 1000);
+        currentTime = currentTimeRef.current + (callbacks.updateInterval / 1000);
         duration = durationRef.current;
         currentTimeRef.current = currentTime;
       }
@@ -68,26 +73,26 @@ export function useProgressTimer(options: UseProgressTimerOptions = {}) {
       const progress = calculateProgress(currentTime, duration);
 
       // Проверяем порог прослушивания
-      const threshold = config.listenThreshold(duration);
+      const threshold = callbacks.listenThreshold(duration);
       if (currentTime >= threshold && !listenThresholdReachedRef.current) {
         listenThresholdReachedRef.current = true;
-        config.onListenThresholdReached(currentTime, duration);
+        callbacks.onListenThresholdReached(currentTime, duration);
       }
 
       // Проверяем завершение трека
       if (currentTime >= duration - 0.5) {
         console.log('🔄 Трек завершен по таймеру');
         cleanup();
-        config.onTrackEnd();
+        callbacks.onTrackEnd();
         return;
       }
 
       // Обновляем время только если трек реально играет
       if (!audioElementRef.current || !audioElementRef.current.paused) {
-        config.onTimeUpdate(currentTime, duration, progress);
+        callbacks.onTimeUpdate(currentTime, duration, progress);
       }
-    }, config.updateInterval);
-  }, [cleanup, config]);
+    }, callbacksRef.current.updateInterval);
+  }, [cleanup]);
 
   const pause = useCallback(() => {
     isRunningRef.current = false;
@@ -114,11 +119,11 @@ export function useProgressTimer(options: UseProgressTimerOptions = {}) {
     listenThresholdReachedRef.current = false; // Сбрасываем флаг при перемотке
     
     // Проверяем, нужно ли сразу отметить порог как достигнутый
-    const threshold = config.listenThreshold(durationRef.current);
+    const threshold = callbacksRef.current.listenThreshold(durationRef.current);
     if (time >= threshold) {
       listenThresholdReachedRef.current = true;
     }
-  }, [config]);
+  }, []);
 
   const setDuration = useCallback((duration: number) => {
     durationRef.current = Math.max(0, duration);

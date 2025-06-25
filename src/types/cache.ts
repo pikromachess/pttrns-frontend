@@ -26,3 +26,9 @@ export interface ApiKeyCache {
   expiresAt: Date;
   serverUrl: string;
 }
+
+export interface MusicApiKeyData {
+  apiKey: string;
+  expiresAt: string;
+  musicServerUrl: string;
+}

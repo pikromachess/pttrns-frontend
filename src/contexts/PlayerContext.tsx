@@ -1,4 +1,4 @@
-// src/contexts/PlayerContext.refactored.tsx
+// src/contexts/PlayerContext.tsx
 import { 
   createContext, 
   useContext, 
@@ -44,60 +44,60 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
 
   // Хук управления плейлистом
   const playlistManager = usePlaylistManager({
-    onTrackChange: (nft, index) => {
+    onTrackChange: useCallback((nft: NFT, index: number) => {
       console.log('🎵 Трек изменился:', { name: nft.metadata?.name, index });
-    },
-    onPlaylistUpdate: (playlist) => {
+    }, []),
+    onPlaylistUpdate: useCallback((playlist: NFT[]) => {
       console.log('📋 Плейлист обновлен:', playlist.length, 'треков');
-    }
+    }, [])
   });
 
   // Хук таймера прогресса
   const progressTimer = useProgressTimer({
-    onTimeUpdate: (currentTime, duration, progress) => {
+    onTimeUpdate: useCallback(() => {
       // Обновления времени обрабатываются автоматически через audioPlayer
-    },
-    onTrackEnd: () => {
+    }, []),
+    onTrackEnd: useCallback(() => {
       console.log('🔄 Трек завершен, переключаемся на следующий');
       handleTrackEnd();
-    },
-    onListenThresholdReached: (currentTime, duration) => {
+    }, []), // Добавим handleTrackEnd в зависимости позже
+    onListenThresholdReached: useCallback((currentTime: number, duration: number) => {
       const currentNft = playlistManager.getCurrentTrack();
       if (currentNft && listenTracker.shouldRecord(currentNft, currentTime, duration)) {
         recordListen(currentNft);
       }
-    }
+    }, [playlistManager, listenTracker]) // Стабильные зависимости
   });
 
   // Хук аудио плеера
   const audioPlayer = useAudioPlayer({
-    onTimeUpdate: (time, duration) => {
+    onTimeUpdate: useCallback((time: number, duration: number) => {
       // Дополнительная логика при обновлении времени
       const currentNft = playlistManager.getCurrentTrack();
       if (currentNft && listenTracker.shouldRecord(currentNft, time, duration)) {
         recordListen(currentNft);
       }
-    },
-    onPlaying: () => {
+    }, [playlistManager, listenTracker]),
+    onPlaying: useCallback(() => {
       progressTimer.start(audioPlayer.audioRef.current);
-    },
-    onPause: () => {
+    }, [progressTimer]),
+    onPause: useCallback(() => {
       progressTimer.pause();
-    },
-    onEnded: () => {
+    }, [progressTimer]),
+    onEnded: useCallback(() => {
       handleTrackEnd();
-    },
-    onError: (error) => {
+    }, []), // Добавим handleTrackEnd в зависимости позже
+    onError: useCallback((error: string) => {
       console.error('❌ Ошибка аудио плеера:', error);
       setIsLoadingTrack(false);
       // Попробуем переключиться на следующий трек при ошибке
       if (!playlistManager.isEmpty()) {
         setTimeout(() => handleTrackEnd(), 1000);
       }
-    },
-    onLoadedMetadata: (duration) => {
+    }, [playlistManager]),
+    onLoadedMetadata: useCallback((duration: number) => {
       progressTimer.setDuration(duration);
-    }
+    }, [progressTimer])
   });
 
   // Функция записи прослушивания
@@ -327,19 +327,20 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
     playlistManager.updatePlaylist(nfts);
   }, [playlistManager]);
 
-  // Очистка при размонтировании
+  // Исправляем зависимости в useEffect - очистка только при размонтировании
   useEffect(() => {
     isMountedRef.current = true;
     
     return () => {
       isMountedRef.current = false;
+      // Очищаем ресурсы только при размонтировании компонента
       musicCache.clear();
       listenTracker.clear();
       musicApiKey.clearCache();
       musicGenerationService.cleanup();
       listenRecordService.cleanup();
     };
-  }, [musicCache, listenTracker, musicApiKey]);
+  }, []); // Пустой массив зависимостей!
 
   // Значение контекста
   const value: PlayerContextType = {
