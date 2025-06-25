@@ -1,4 +1,3 @@
-// src/components/NFTList/NFTList.tsx
 import { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { usePlayer } from '../../contexts/PlayerContext';
@@ -113,11 +112,11 @@ export function NFTList({ nfts, loading, error, searchQuery, sortBy }: NFTListPr
                   </div>
                 )}
 
-                {/* Анимация воспроизведения */}
-                {isCurrentPlaying && !isGenerating && (
+                {/* Анимация воспроизведения - показываем только когда реально играет */}
+                {isCurrentPlaying && !isGenerating && isPlaying && (
                   <div style={nftListStyles.playingOverlay}>
                     <PlayingAnimation 
-                      isPlaying={isPlaying} 
+                      isPlaying={true} 
                       size="medium" 
                     />
                   </div>
@@ -131,8 +130,8 @@ export function NFTList({ nfts, loading, error, searchQuery, sortBy }: NFTListPr
                 <div style={isCurrentPlaying ? nftListStyles.subtitlePlaying : nftListStyles.subtitle}>
                   {nft.collection?.name || 'Без коллекции'}
                   {isGenerating && ' • Генерация музыки...'}
-                  {isCurrentPlaying && isPlaying && ' • Воспроизводится'}
-                  {isCurrentPlaying && !isPlaying && ' • На паузе'}
+                  {isCurrentPlaying && !isGenerating && isPlaying && ' • Воспроизводится'}
+                  {isCurrentPlaying && !isGenerating && !isPlaying && ' • На паузе'}
                 </div>
               </div>
             </motion.div>
