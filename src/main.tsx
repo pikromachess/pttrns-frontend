@@ -65,13 +65,15 @@ function Root() {
         tg.BackButton.hide(); // Изначально скрыта
       }
       
+      
       // Проверяем поддержку функций перед их вызовом
       if (tg.disableVerticalSwipes) {
         tg.disableVerticalSwipes();
-      }
+      }      
       
-      if (tg.enableClosingConfirmation && tg.isClosingConfirmationEnabled !== undefined) {
-        tg.enableClosingConfirmation();
+      if (tg.disableClosingConfirmation) {
+        tg.disableClosingConfirmation();
+        console.log('🔓 Подтверждение закрытия отключено');
       }
 
       const updateSafeArea = () => {
