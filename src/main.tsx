@@ -6,7 +6,6 @@ import Library from './components/Library/Library';
 import CollectionPage from './components/CollectionPage/CollectionPage';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { TonConnectUIProvider } from '@tonconnect/ui-react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { NavBarProvider } from './contexts/NavBarContext.tsx';
 import { PlayerProvider } from './contexts/PlayerContext';
 import { MiniPlayer } from './components/MiniPlayer/MiniPlayer.tsx';
@@ -19,52 +18,11 @@ function AnimatedRoutes() {
   const location = useLocation();
 
   return (
-    <AnimatePresence mode="wait">
-      <Routes location={location} key={location.pathname}>
-        <Route 
-          path="/" 
-          element={
-            <motion.div
-              key="home"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.1 }}
-            >
-              <App />
-            </motion.div>
-          } 
-        />
-        <Route 
-          path="/library" 
-          element={
-            <motion.div
-              key="library"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.1 }}
-            >
-              <Library />
-            </motion.div>
-          } 
-        />
-        <Route 
-          path="/collection/:address" 
-          element={
-            <motion.div
-              key="collection"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.1 }}
-            >
-              <CollectionPage />
-            </motion.div>
-          } 
-        />
-      </Routes>
-    </AnimatePresence>
+    <Routes location={location} key={location.pathname}>
+      <Route path="/" element={<App />} />
+      <Route path="/library" element={<Library />} />
+      <Route path="/collection/:address" element={<CollectionPage />} />
+    </Routes>
   );
 }
 

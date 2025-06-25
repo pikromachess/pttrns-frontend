@@ -121,16 +121,7 @@ function NFTInfo({ nft, index }: { nft: NFTWithListens; index: number }) {
         marginBottom: '2px'
       }}>
         {nft.metadata?.name || `NFT #${nft.index || index + 1}`}
-      </div>
-      <div style={{
-        fontSize: '12px',
-        color: '#999',
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        whiteSpace: 'nowrap'
-      }}>
-        Статистика коллекции
-      </div>
+      </div>      
     </div>
   );
 }

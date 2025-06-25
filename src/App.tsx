@@ -1,9 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import icon from './assets/icon.png';
 import './App.css';
-import { TonConnectButton } from '@tonconnect/ui-react';
+import { UpperBar } from './components/UpperBar/UpperBar';
 import { backendApi } from './backend-api';
 import { NavBar } from './components/NavBar/NavBar';
 import type { Collection } from './types/nft';
@@ -13,9 +12,10 @@ function App() {
   const [collections, setCollections] = useState<Collection[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
-  const isTelegram = !!(window.Telegram && window.Telegram.WebApp);
-  const telegramAvatar = isTelegram && window.Telegram.WebApp.initDataUnsafe?.user?.photo_url;
+  const [isSearchVisible, setIsSearchVisible] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
+  const tonConnectButtonRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const fetchCollections = async () => {
@@ -59,51 +59,28 @@ function App() {
     return count.toString();
   };
 
+  const onSortSelect = (sortOption: string) => {
+    console.log('Selected sort option:', sortOption);
+    // Implement sorting logic here if needed
+  };
+
+  const searchWidth = () => {
+    return tonConnectButtonRef.current?.offsetWidth || 0;
+  };
+
   return (
     <div className="app">
-      <div className="upper-bar">
-        <div className="tonConnectButton">
-          <TonConnectButton style={{boxShadow: 'none'}} />
-        </div>
-        <div
-          style={{
-            position: 'absolute',
-            left: '50%',
-            top: 'calc(var(--safe-area-top) + 12px)',
-            transform: 'translateX(-50%)',
-            display: 'flex',
-            alignItems: 'center',            
-            zIndex: 15,
-          }}
-        >
-          <img
-            src={icon}
-            alt="App Icon"
-            style={{
-              width: '36px',
-              height: '36px',
-              objectFit: 'contain',
-            }}
-          />
-          
-          {isTelegram && telegramAvatar && (
-            <>
-              <p style={{ margin: 0, color: '#fff', fontSize: '14px' }}> loves </p>
-              <img
-                src={telegramAvatar}
-                alt="Telegram Avatar"
-                style={{
-                  width: '24px',
-                  height: '24px',
-                  objectFit: 'cover',
-                  borderRadius: '50%', 
-                  marginLeft: '6px',           
-                }}
-              />
-            </>
-          )}
-        </div>
-      </div>
+      <UpperBar
+        isSearchVisible={isSearchVisible}
+        setIsSearchVisible={setIsSearchVisible}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        isSortMenuOpen={isSortMenuOpen}
+        setIsSortMenuOpen={setIsSortMenuOpen}
+        onSortSelect={onSortSelect}
+        searchWidth={searchWidth}
+        tonConnectButtonRef={tonConnectButtonRef}
+      />
 
       <div className="main-content">
         <div style={{ 
