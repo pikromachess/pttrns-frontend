@@ -5,6 +5,7 @@ import { ArrowLeftIcon, PlayIcon } from '@heroicons/react/24/outline';
 import { TonConnectButton, useTonWallet } from '@tonconnect/ui-react';
 import { backendApi } from '../../backend-api';
 import { BackendTokenContext } from '../../BackendTokenContext';
+import { usePlayer } from '../../contexts/PlayerContext';
 import type { NFT } from '../../types/nft';
 import '../../App.css';
 import { NavBar } from '../NavBar/NavBar';
@@ -28,6 +29,7 @@ export default function CollectionPage() {
   const collection = location.state?.collection as Collection;
   const wallet = useTonWallet();
   const { token } = useContext(BackendTokenContext);
+  const { playNft } = usePlayer();
   
   const [topNfts, setTopNfts] = useState<NFTWithListens[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,12 +45,28 @@ export default function CollectionPage() {
         
         const response = await backendApi.getTopNftsInCollection(address, 7);
         if (response && response.nfts) {
-          setTopNfts(response.nfts);
+          // Обогащаем NFT информацией о коллекции
+          const enrichedNfts = response.nfts.map(nft => ({
+            ...nft,
+            collection: {
+              name: collection?.name || nft.collection?.name || 'Неизвестная коллекция',
+              address: address // Используем адрес из параметров URL
+            }
+          }));
+          
+          console.log('📋 Загружены NFT коллекции:', {
+            collectionAddress: address,
+            collectionName: collection?.name,
+            nftsCount: enrichedNfts.length,
+            firstNft: enrichedNfts[0]
+          });
+          
+          setTopNfts(enrichedNfts);
         } else {
           setError('Не удалось загрузить NFT коллекции');
         }
       } catch (err) {
-        console.error('Ошибка загрузки NFT коллекции:', err);
+        console.error('❌ Ошибка загрузки NFT коллекции:', err);
         setError('Ошибка загрузки данных');
       } finally {
         setLoading(false);
@@ -56,7 +74,7 @@ export default function CollectionPage() {
     };
 
     fetchTopNfts();
-  }, [address]);
+  }, [address, collection?.name]);
 
   const formatListens = (count: number): string => {
     if (count >= 1000000) {
@@ -74,7 +92,15 @@ export default function CollectionPage() {
     }
   };
 
-  const handleNftItemClick = (nft: NFTWithListens) => {
+  const handleNftItemClick = async (nft: NFTWithListens) => {
+    console.log('🎯 Клик по NFT в коллекции:', {
+      name: nft.metadata?.name,
+      address: nft.address,
+      hasWallet: !!wallet,
+      hasToken: !!token,
+      collectionAddress: nft.collection?.address
+    });
+
     // Проверяем авторизацию
     if (!wallet || !token) {
       // Показываем сообщение и перенаправляем в Library для аутентификации
@@ -87,14 +113,38 @@ export default function CollectionPage() {
       return;
     }
 
-    // Если авторизован, перенаправляем в Library с параметрами для автовоспроизведения
-    navigate('/library', { 
-      state: { 
-        autoPlay: true, 
-        selectedNft: nft,
-        fromCollection: collection?.address 
-      } 
-    });
+    try {
+      // Убеждаемся, что у всех NFT в списке есть правильная информация о коллекции
+      const nftsWithCollection = topNfts.map(topNft => ({
+        ...topNft,
+        collection: {
+          name: collection?.name || topNft.collection?.name || 'Неизвестная коллекция',
+          address: address! // Используем адрес коллекции из URL
+        }
+      }));
+
+      console.log('🎵 Запускаем воспроизведение из коллекции:', {
+        selectedTrack: nft.metadata?.name,
+        totalTracks: nftsWithCollection.length,
+        collectionAddress: address,
+        allTracksHaveCollection: nftsWithCollection.every(n => n.collection?.address)
+      });
+
+      // Передаем правильно обогащенный плейлист в плеер
+      await playNft(nft, nftsWithCollection);
+      
+      // Перенаправляем в Library для отображения плеера
+      navigate('/library', { 
+        state: { 
+          fromCollection: address,
+          autoPlaying: true
+        } 
+      });
+      
+    } catch (error) {
+      console.error('❌ Ошибка при запуске воспроизведения:', error);
+      alert('Ошибка при запуске воспроизведения');
+    }
     
     if (window.Telegram && window.Telegram.WebApp) {
       window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
@@ -290,10 +340,12 @@ export default function CollectionPage() {
             }}>
               {topNfts.map((nft, index) => {
                 const canPlay = wallet && token;
+                // Создаем уникальный ключ для каждого NFT
+                const uniqueKey = `${nft.address || 'no-address'}-${nft.index || index}-${address || 'no-collection'}`;
                 
                 return (
                   <motion.div
-                    key={nft.address || `nft-${index}`}
+                    key={uniqueKey}
                     onClick={() => handleNftItemClick(nft)}
                     whileTap={{ scale: 0.98 }}
                     style={{

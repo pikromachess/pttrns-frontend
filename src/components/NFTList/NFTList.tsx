@@ -52,12 +52,14 @@ export function NFTList({ nfts, loading, error, searchQuery, sortBy }: NFTListPr
     <>
       <div style={nftListStyles.container}>
         {filteredNfts.map((nft, index) => {
+          // Создаем уникальный ключ, комбинируя все доступные идентификаторы
+          const uniqueKey = `${nft.address || 'no-address'}-${nft.index || index}-${nft.collection?.address || 'no-collection'}`;
           const nftId = nft.address || `${nft.index}`;
           const isGenerating = generatingMusic === nftId;
           
           return (
             <motion.div
-              key={nft.address || `nft-${index}`}
+              key={uniqueKey}
               onClick={() => {
                 console.log('Клик по NFT:', nft.metadata?.name, 'Передаем плейлист из', filteredNfts.length, 'треков');
                 handleNftClick(nft, filteredNfts);

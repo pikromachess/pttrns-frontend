@@ -4,7 +4,7 @@ import './index.css';
 import App from './App.tsx';
 import Library from './components/Library/Library';
 import CollectionPage from './components/CollectionPage/CollectionPage';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { TonConnectUIProvider } from '@tonconnect/ui-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { NavBarProvider } from './contexts/NavBarContext.tsx';
@@ -14,8 +14,61 @@ import { NFTProvider } from './contexts/NFTContext';
 import { BackendTokenContext } from './BackendTokenContext';
 import { ProvideBackendAuth } from './ProvideBackendAuth';
 
+// Компонент для анимированных роутов
+function AnimatedRoutes() {
+  const location = useLocation();
+
+  return (
+    <AnimatePresence mode="wait">
+      <Routes location={location} key={location.pathname}>
+        <Route 
+          path="/" 
+          element={
+            <motion.div
+              key="home"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <App />
+            </motion.div>
+          } 
+        />
+        <Route 
+          path="/library" 
+          element={
+            <motion.div
+              key="library"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <Library />
+            </motion.div>
+          } 
+        />
+        <Route 
+          path="/collection/:address" 
+          element={
+            <motion.div
+              key="collection"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <CollectionPage />
+            </motion.div>
+          } 
+        />
+      </Routes>
+    </AnimatePresence>
+  );
+}
+
 function Root() {
-  // const [setSafeAreaInsets] = useState({ top: 0, left: 0, right: 0, bottom: 0 });
   const [token, setToken] = useState<string | undefined>(undefined);
   
   useEffect(() => {
@@ -47,15 +100,18 @@ function Root() {
       tg.expand();
       tg.ready();
       tg.MainButton.hide();
-      tg.disableVerticalSwipes();
       
-      if (tg.isClosingConfirmationEnabled !== undefined) {
+      // Проверяем поддержку функций перед их вызовом
+      if (tg.disableVerticalSwipes) {
+        tg.disableVerticalSwipes();
+      }
+      
+      if (tg.enableClosingConfirmation && tg.isClosingConfirmationEnabled !== undefined) {
         tg.enableClosingConfirmation();
       }
 
       const updateSafeArea = () => {
         const insets = tg.contentSafeAreaInset || { top: 0, left: 0, right: 0, bottom: 0 };
-        // setSafeAreaInsets(insets);
         
         document.documentElement.style.setProperty('--safe-area-top', `${insets.top}px`);
         document.documentElement.style.setProperty('--safe-area-bottom', `${insets.bottom}px`);
@@ -64,7 +120,10 @@ function Root() {
       };
       
       updateSafeArea();
-      tg.onEvent('viewportChanged', updateSafeArea);
+      
+      if (tg.onEvent) {
+        tg.onEvent('viewportChanged', updateSafeArea);
+      }
 
       if (tg.themeParams) {
         document.documentElement.style.setProperty('--tg-theme-bg-color', tg.themeParams.bg_color || '#ffffff');
@@ -92,45 +151,16 @@ function Root() {
     <TonConnectUIProvider manifestUrl="https://pikromachess-pttrns-frontend-dc0f.twc1.net/tonconnect-manifest.json">
       <BackendTokenContext.Provider value={{ token, setToken }}>
         <ProvideBackendAuth />
-      <PlayerProvider>
-        <NFTProvider>
-          <BrowserRouter>
-            <NavBarProvider>
-              <AnimatePresence>
-                <Routes>
-                  <Route path="/" element={ 
-                    <motion.div                        
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 0.2 }}>
-                        <App />
-                    </motion.div>} />
-                  <Route path="/library" element={
-                    <motion.div                        
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 0.2 }}>
-                        <Library />
-                    </motion.div>               
-                  } />
-                  <Route path="/collection/:address" element={
-                    <motion.div                        
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 0.2 }}>
-                        <CollectionPage />
-                    </motion.div>               
-                  } />
-                </Routes>
+        <PlayerProvider>
+          <NFTProvider>
+            <BrowserRouter>
+              <NavBarProvider>
+                <AnimatedRoutes />
                 <MiniPlayer />
-              </AnimatePresence>
-            </NavBarProvider>
-          </BrowserRouter>
-        </NFTProvider>
-      </PlayerProvider>
+              </NavBarProvider>
+            </BrowserRouter>
+          </NFTProvider>
+        </PlayerProvider>
       </BackendTokenContext.Provider>
     </TonConnectUIProvider>
   );
