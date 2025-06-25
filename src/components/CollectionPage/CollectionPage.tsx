@@ -22,6 +22,7 @@ export default function CollectionPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
   const tonConnectButtonRef = useRef<HTMLDivElement | null>(null);
+  const upperBarRef = useRef<HTMLDivElement | null>(null); 
 
   const formatListens = (count: number): string => {
     if (count >= 1000000) {
@@ -38,7 +39,14 @@ export default function CollectionPage() {
   };
 
   const searchWidth = () => {
-    return tonConnectButtonRef.current?.offsetWidth || 0;
+    if (upperBarRef.current && tonConnectButtonRef.current) {
+      const upperBarWidth = upperBarRef.current.offsetWidth;
+      const tonButtonWidth = tonConnectButtonRef.current.offsetWidth;
+      const paddingAndGap = 6 + 6 + 6 + 40;
+      const iconWidth = 40;
+      return Math.max(140, upperBarWidth - tonButtonWidth - paddingAndGap - iconWidth);
+    }
+    return 140;
   };
 
   useEffect(() => {

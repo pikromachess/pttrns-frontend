@@ -19,7 +19,7 @@ export function NFTStatItem({ nft, index, formatListens }: NFTStatItemProps) {
         padding: '12px 16px',
         backgroundColor: '#1c1c1c',
         borderRadius: '12px',
-        border: '1px solid #333',
+        // border: '1px solid #333',
         pointerEvents: 'none' // Убираем возможность клика
       }}
     >

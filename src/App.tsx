@@ -16,6 +16,7 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
   const tonConnectButtonRef = useRef<HTMLDivElement | null>(null);
+  const upperBarRef = useRef<HTMLDivElement | null>(null);    
 
   useEffect(() => {
     const fetchCollections = async () => {
@@ -65,7 +66,14 @@ function App() {
   };
 
   const searchWidth = () => {
-    return tonConnectButtonRef.current?.offsetWidth || 0;
+    if (upperBarRef.current && tonConnectButtonRef.current) {
+      const upperBarWidth = upperBarRef.current.offsetWidth;
+      const tonButtonWidth = tonConnectButtonRef.current.offsetWidth;
+      const paddingAndGap = 6 + 6 + 6 + 40;
+      const iconWidth = 40;
+      return Math.max(140, upperBarWidth - tonButtonWidth - paddingAndGap - iconWidth);
+    }
+    return 140;
   };
 
   return (
@@ -108,7 +116,7 @@ function App() {
               color: '#999',
               marginBottom: '0'
             }}>
-              Выберите коллекцию для прослушивания NFT музыки
+              Здесь представлена статистика прослушиваний NFT коллекций
             </p>
           </div>
 
@@ -120,8 +128,7 @@ function App() {
             }}>
               <div style={{
                 width: '32px',
-                height: '32px',
-                border: '3px solid #333',
+                height: '32px',                
                 borderTop: '3px solid #2AABEE',
                 borderRadius: '50%',
                 animation: 'spin 1s linear infinite',
@@ -169,8 +176,7 @@ function App() {
                     backgroundColor: '#1c1c1c',
                     borderRadius: '12px',
                     cursor: 'pointer',
-                    transition: 'background-color 0.2s',
-                    border: '1px solid #333'
+                    transition: 'background-color 0.2s',                    
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.backgroundColor = '#252525';
