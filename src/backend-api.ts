@@ -30,8 +30,13 @@ interface NFTWithListens {
   listens: number;
 }
 
+interface NFTStatsResponse {
+  nfts: NFTWithListens[];
+  total: number;
+  hasMore: boolean;
+}
+
 export class BackendApi {
-     
     baseUrl = 'http://localhost:3000';
 
     async generatePayload(): Promise<string | undefined> {
@@ -39,7 +44,6 @@ export class BackendApi {
             const response = await (await fetch(`${this.baseUrl}/ton-proof/generatePayload`, {
                 method: 'POST'
             })).json();
-
             return response.payload;
         } catch (e) {
             console.error(e);
@@ -57,7 +61,6 @@ export class BackendApi {
                     state_init: account.walletStateInit
                 }
             }
-
             const response = await (await fetch(`${this.baseUrl}/ton-proof/checkProof`, {
                 method: 'POST',
                 headers: {
@@ -65,10 +68,7 @@ export class BackendApi {
                 },
                 body: JSON.stringify(body)
             })).json();
-
             return response.token;
-
-
         } catch (e) {
             console.error(e);
             return undefined;
@@ -82,7 +82,6 @@ export class BackendApi {
                     'Authorization': `Bearer ${authToken}`
                 }
             })).json();
-
             return response;
         } catch (e) {
             console.error(e);
@@ -98,7 +97,6 @@ export class BackendApi {
                 limit: limit.toString(),
                 offset: offset.toString()
             });
-
             const response = await fetch(`${this.baseUrl}/dapp/getNFTs?${params}`, {
                 headers: {
                     'Authorization': `Bearer ${authToken}`,
@@ -106,11 +104,9 @@ export class BackendApi {
                     'Content-Type': 'application/json'
                 }
             });
-
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
-
             return await response.json() as NFTResponse;
         } catch (e) {
             console.error('Ошибка при получении NFT:', e);
@@ -118,7 +114,6 @@ export class BackendApi {
         }
     }
 
-    // Новый метод для получения музыкального API ключа
     async generateMusicApiKey(authToken: string): Promise<{apiKey: string, expiresAt: string, musicServerUrl: string} | undefined> {
         try {
             const response = await fetch(`${this.baseUrl}/dapp/generateMusicApiKey`, {
@@ -128,11 +123,9 @@ export class BackendApi {
                     'Content-Type': 'application/json'
                 }
             });
-
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
-
             return await response.json();
         } catch (e) {
             console.error('Ошибка при генерации музыкального API ключа:', e);
@@ -140,7 +133,6 @@ export class BackendApi {
         }
     }
 
-    // Новый метод для получения коллекций с прослушиваниями
     async getCollections(): Promise<{collections: Collection[]} | undefined> {
         try {
             const response = await fetch(`${this.baseUrl}/api/collections`, {
@@ -150,11 +142,9 @@ export class BackendApi {
                     'Content-Type': 'application/json'
                 }
             });
-
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
-
             return await response.json();
         } catch (e) {
             console.error('Ошибка при получении коллекций:', e);
@@ -162,7 +152,6 @@ export class BackendApi {
         }
     }
 
-    // Новый метод для получения топ NFT в коллекции
     async getTopNftsInCollection(collectionAddress: string, limit: number = 7): Promise<{nfts: NFTWithListens[]} | undefined> {
         try {
             const response = await fetch(`${this.baseUrl}/api/collections/${collectionAddress}/top-nfts?limit=${limit}`, {
@@ -172,11 +161,9 @@ export class BackendApi {
                     'Content-Type': 'application/json'
                 }
             });
-
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
-
             return await response.json();
         } catch (e) {
             console.error('Ошибка при получении топ NFT коллекции:', e);
@@ -184,7 +171,29 @@ export class BackendApi {
         }
     }
 
-    // Новый метод для записи прослушивания
+    async getCollectionNftsStats(collectionAddress: string, limit: number = 100, offset: number = 0): Promise<NFTStatsResponse | undefined> {
+        try {
+            const params = new URLSearchParams({
+                limit: limit.toString(),
+                offset: offset.toString()
+            });
+            const response = await fetch(`${this.baseUrl}/api/collections/${collectionAddress}/nfts-stats?${params}`, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                }
+            });
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return await response.json() as NFTStatsResponse;
+        } catch (e) {
+            console.error('Ошибка при получении статистики NFT коллекции:', e);
+            return undefined;
+        }
+    }
+
     async recordListen(nftAddress: string, collectionAddress: string): Promise<boolean> {
         try {
             const response = await fetch(`${this.baseUrl}/api/listens`, {
@@ -197,7 +206,6 @@ export class BackendApi {
                     collectionAddress
                 })
             });
-
             return response.ok;
         } catch (e) {
             console.error('Ошибка при записи прослушивания:', e);
@@ -205,7 +213,6 @@ export class BackendApi {
         }
     }
 
-    // Новый метод для получения статистики
     async getStats(): Promise<{totalNftsListened: number, totalListens: number, totalCollections: number} | undefined> {
         try {
             const response = await fetch(`${this.baseUrl}/api/stats`, {
@@ -215,11 +222,9 @@ export class BackendApi {
                     'Content-Type': 'application/json'
                 }
             });
-
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
-
             return await response.json();
         } catch (e) {
             console.error('Ошибка при получении статистики:', e);
@@ -227,7 +232,6 @@ export class BackendApi {
         }
     }
 
-    // Новый метод для получения статуса синхронизации
     async getSyncStatus(): Promise<any | undefined> {
         try {
             const response = await fetch(`${this.baseUrl}/api/sync-status`, {
@@ -237,11 +241,9 @@ export class BackendApi {
                     'Content-Type': 'application/json'
                 }
             });
-
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
-
             return await response.json();
         } catch (e) {
             console.error('Ошибка при получении статуса синхронизации:', e);
