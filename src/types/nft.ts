@@ -20,6 +20,14 @@ export interface NFT {
   audioUrl?: string; 
 }
 
+export interface NFTListProps {
+  nfts: NFT[];
+  loading: boolean;
+  error: string | null;
+  searchQuery: string;
+  sortBy: string | null;
+}
+
 export interface NFTContextType {
   nfts: NFT[];
   loading: boolean;
@@ -40,4 +48,39 @@ export interface NFTResponse {
     };
     total?: number;
     hasMore?: boolean;
+}
+
+export interface Collection {
+  address: string;
+  name: string;
+  image?: string;
+  totalListens: number;
+  description?: string;
+}
+
+export interface NFTWithListens {
+  address: string;
+  index?: number;
+  metadata?: {
+    name?: string;
+    image?: string;
+    description?: string;
+    attributes?: any[];
+    animation_url?: string;
+    audio_url?: string;
+    [key: string]: any;
+  };
+  collection?: {
+    name?: string;
+    address?: string;
+  };  
+  trust?: string; 
+  audioUrl?: string;
+  listens: number;
+}
+
+export interface NFTStatsResponse {
+  nfts: NFTWithListens[];
+  total: number;
+  hasMore: boolean;
 }

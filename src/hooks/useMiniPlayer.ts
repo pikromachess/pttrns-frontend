@@ -1,4 +1,3 @@
-// hooks/useMiniPlayer.ts
 import { useState, useRef, useEffect } from 'react';
 import { triggerHapticFeedback } from '../helpers';
 

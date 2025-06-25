@@ -3,16 +3,8 @@ import { motion } from 'framer-motion';
 import { usePlayer } from '../../contexts/PlayerContext';
 import { useNFTSearch } from '../../hooks/useNFTSearch';
 import { useMusicGeneration } from '../../hooks/useMusicGeneration';
-import type { NFT } from '../../types/nft';
+import type { NFTListProps } from '../../types/nft';
 import { nftListStyles } from './NFTList.styles';
-
-interface NFTListProps {
-  nfts: NFT[];
-  loading: boolean;
-  error: string | null;
-  searchQuery: string;
-  sortBy: string | null;
-}
 
 export function NFTList({ nfts, loading, error, searchQuery, sortBy }: NFTListProps) {
   const { updatePlaylist } = usePlayer();

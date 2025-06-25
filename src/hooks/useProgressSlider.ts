@@ -1,4 +1,3 @@
-// hooks/useProgressSlider.ts
 import { useState, useRef, useEffect, useCallback } from 'react';
 
 interface UseProgressSliderProps {

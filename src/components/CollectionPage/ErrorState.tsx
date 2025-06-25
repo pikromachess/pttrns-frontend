@@ -1,4 +1,3 @@
-// src/components/CollectionPage/ErrorState.tsx
 interface ErrorStateProps {
   error: string;
 }

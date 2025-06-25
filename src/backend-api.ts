@@ -1,43 +1,8 @@
 import type {Account, CHAIN, TonProofItemReplySuccess} from "@tonconnect/ui-react";
-import type { NFTResponse } from "./types/nft";
-
-interface Collection {
-  address: string;
-  name: string;
-  image?: string;
-  totalListens: number;
-  description?: string;
-}
-
-interface NFTWithListens {
-  address: string;
-  index?: number;
-  metadata?: {
-    name?: string;
-    image?: string;
-    description?: string;
-    attributes?: any[];
-    animation_url?: string;
-    audio_url?: string;
-    [key: string]: any;
-  };
-  collection?: {
-    name?: string;
-    address?: string;
-  };  
-  trust?: string; 
-  audioUrl?: string;
-  listens: number;
-}
-
-interface NFTStatsResponse {
-  nfts: NFTWithListens[];
-  total: number;
-  hasMore: boolean;
-}
+import type { NFTResponse, Collection, NFTWithListens, NFTStatsResponse } from "./types/nft";
 
 export class BackendApi {
-    baseUrl = 'http://localhost:3000';
+    baseUrl = 'https://pttrns-backend-ts.vercel.app';
 
     async generatePayload(): Promise<string | undefined> {
         try {

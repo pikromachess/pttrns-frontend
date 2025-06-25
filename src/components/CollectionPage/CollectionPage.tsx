@@ -11,29 +11,7 @@ import { ErrorState } from './ErrorState';
 import { EmptyState } from './EmptyState';
 import { NavBar } from '../NavBar/NavBar';
 import '../../App.css';
-
-interface Collection {
-  address: string;
-  name: string;
-  image?: string;
-  totalListens: number;
-  description?: string;
-}
-
-interface NFTWithListens {
-  address: string;
-  index?: number;
-  metadata?: {
-    name?: string;
-    image?: string;
-    description?: string;
-  };
-  collection?: {
-    name?: string;
-    address?: string;
-  };
-  listens: number;
-}
+import type { Collection, NFTWithListens } from '../../types/nft';
 
 export default function CollectionPage() {
   const { address } = useParams<{ address: string }>();

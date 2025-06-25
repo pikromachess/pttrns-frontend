@@ -1,4 +1,3 @@
-// src/components/CollectionPage/EmptyState.tsx
 export function EmptyState() {
   return (
     <div style={{

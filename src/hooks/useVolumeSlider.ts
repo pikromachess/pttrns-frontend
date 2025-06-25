@@ -1,4 +1,3 @@
-// hooks/useVolumeSlider.ts
 import { useState, useRef, useEffect } from 'react';
 
 export function useVolumeSlider(onVolumeChange: (volume: number) => void) {

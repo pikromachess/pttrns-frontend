@@ -1,4 +1,3 @@
-// src/components/CollectionPage/LoadingState.tsx
 export function LoadingState() {
   return (
     <div style={{

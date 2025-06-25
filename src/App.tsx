@@ -6,14 +6,7 @@ import './App.css';
 import { TonConnectButton } from '@tonconnect/ui-react';
 import { backendApi } from './backend-api';
 import { NavBar } from './components/NavBar/NavBar';
-
-interface Collection {
-  address: string;
-  name: string;
-  image?: string;
-  totalListens: number;
-  description?: string;
-}
+import type { Collection } from './types/nft';
 
 function App() {
   const navigate = useNavigate();

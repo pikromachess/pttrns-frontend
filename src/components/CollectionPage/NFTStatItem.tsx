@@ -1,20 +1,6 @@
 // src/components/CollectionPage/NFTStatItem.tsx
 import { motion } from 'framer-motion';
-
-interface NFTWithListens {
-  address: string;
-  index?: number;
-  metadata?: {
-    name?: string;
-    image?: string;
-    description?: string;
-  };
-  collection?: {
-    name?: string;
-    address?: string;
-  };
-  listens: number;
-}
+import type { NFTWithListens } from '../../types/nft';
 
 interface NFTStatItemProps {
   nft: NFTWithListens;

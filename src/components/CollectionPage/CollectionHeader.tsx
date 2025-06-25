@@ -1,10 +1,4 @@
-interface Collection {
-  address: string;
-  name: string;
-  image?: string;
-  totalListens: number;
-  description?: string;
-}
+import type { Collection } from "../../types/nft";
 
 interface CollectionHeaderProps {
   collection: Collection;

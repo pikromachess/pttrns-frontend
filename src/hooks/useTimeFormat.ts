@@ -1,4 +1,3 @@
-// hooks/useTimeFormat.ts
 export function useTimeFormat() {
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
