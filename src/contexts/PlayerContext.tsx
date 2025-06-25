@@ -14,8 +14,6 @@ import { backendApi } from '../backend-api';
 
 const PlayerContext = createContext<PlayerContextType | undefined>(undefined);
 
-
-
 // Кеш для музыкальных API ключей
 let musicApiKeyCache: {
   key: string;
@@ -25,6 +23,9 @@ let musicApiKeyCache: {
 
 // Кеш для сгенерированной музыки
 const musicCache = new Map<string, string>();
+
+// Трекер прослушиваний для избежания дублирования
+const listenTracker = new Set<string>();
 
 export function PlayerProvider({ children }: PlayerProviderProps) {
   const [currentNft, setCurrentNft] = useState<NFT | null>(null);
@@ -43,6 +44,41 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
   const { token } = useContext(BackendTokenContext);
   const isMountedRef = useRef(true);
   const playNextTrackRef = useRef<(() => Promise<void>) | null>(null);
+  const listenRecordedRef = useRef(false);
+
+  // Функция для записи прослушивания
+  const recordListen = useCallback(async (nft: NFT) => {
+    if (!nft.address || !nft.collection?.address) {
+      console.log('Недостаточно данных для записи прослушивания');
+      return;
+    }
+
+    const listenKey = `${nft.address}-${Date.now()}`;
+    
+    // Избегаем дублирования записей для одного и того же NFT
+    if (listenTracker.has(nft.address)) {
+      console.log('Прослушивание уже записано для этого NFT');
+      return;
+    }
+
+    try {
+      listenTracker.add(nft.address);
+      const success = await backendApi.recordListen(nft.address, nft.collection.address);
+      
+      if (success) {
+        console.log('Прослушивание записано для NFT:', nft.metadata?.name);
+      } else {
+        console.error('Ошибка записи прослушивания');
+      }
+    } catch (error) {
+      console.error('Ошибка при записи прослушивания:', error);
+    }
+
+    // Убираем из трекера через 30 секунд, чтобы разрешить повторную запись
+    setTimeout(() => {
+      listenTracker.delete(nft.address);
+    }, 30000);
+  }, []);
 
   // Обновляем громкость аудио элемента при изменении состояния
   useEffect(() => {
@@ -128,6 +164,9 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
   // Основная функция воспроизведения
   const playNft = async (nft: NFT, nfts: NFT[] = []) => {
     console.log('Запуск воспроизведения NFT:', nft.metadata?.name);
+    
+    // Сбрасываем флаг записи прослушивания
+    listenRecordedRef.current = false;
     
     // Формируем плейлист в правильном порядке
     const orderedPlaylist = nfts.length > 0 ? nfts : [nft];
@@ -217,6 +256,13 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
         // Fallback режим без аудио элемента
         setCurrentTime(prev => {
           const newTime = prev + 1;
+          
+          // Записываем прослушивание после 30 секунд
+          if (newTime >= 30 && !listenRecordedRef.current && currentNft) {
+            listenRecordedRef.current = true;
+            recordListen(currentNft);
+          }
+          
           if (newTime >= duration - 1) {
             console.log('Трек завершен (fallback), переключаемся на следующий');
             playNextTrackRef.current?.();
@@ -231,6 +277,12 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
       // Основной режим с аудио элементом
       const actualTime = audioRef.current.currentTime;
       const actualDuration = audioRef.current.duration || duration;
+      
+      // Записываем прослушивание после 30 секунд воспроизведения
+      if (actualTime >= 30 && !listenRecordedRef.current && currentNft) {
+        listenRecordedRef.current = true;
+        recordListen(currentNft);
+      }
       
       // Проверяем, достигли ли конца трека
       if (actualTime >= actualDuration - 0.5) {
@@ -250,8 +302,7 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
         }
       }
     }, 1000);
-  }, [duration]);
-
+  }, [duration, currentNft, recordListen]);
 
   const togglePlay = useCallback(() => {
     if (isPlaying) {
@@ -306,6 +357,7 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
     setIsPlaying(false);
     setCurrentNft(null);
     setCurrentTrackIndex(-1);
+    listenRecordedRef.current = false;
     if (intervalRef.current) clearInterval(intervalRef.current);
     if (audioRef.current) {
       audioRef.current.pause();
@@ -338,6 +390,9 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
     });
 
     if (!isMountedRef.current) return;
+    
+    // Сбрасываем флаг записи прослушивания для нового трека
+    listenRecordedRef.current = false;
     
     setCurrentTrackIndex(nextIndex);
     setCurrentNft(nextNft);
@@ -433,6 +488,9 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
 
     if (!isMountedRef.current) return;
     
+    // Сбрасываем флаг записи прослушивания для нового трека
+    listenRecordedRef.current = false;
+    
     setCurrentTrackIndex(prevIndex);
     setCurrentNft(prevNft);
     setProgress(0);
@@ -509,6 +567,8 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
       }
       // Очищаем кеш музыки при размонтировании
       musicCache.clear();
+      // Очищаем трекер прослушиваний
+      listenTracker.clear();
     };
   }, []);
 

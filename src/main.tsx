@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import './index.css';
 import App from './App.tsx';
 import Library from './components/Library/Library';
+import CollectionPage from './components/CollectionPage/CollectionPage';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { TonConnectUIProvider } from '@tonconnect/ui-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -112,6 +113,15 @@ function Root() {
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.2 }}>
                         <Library />
+                    </motion.div>               
+                  } />
+                  <Route path="/collection/:address" element={
+                    <motion.div                        
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.2 }}>
+                        <CollectionPage />
                     </motion.div>               
                   } />
                 </Routes>

@@ -1,9 +1,38 @@
 import type {Account, CHAIN, TonProofItemReplySuccess} from "@tonconnect/ui-react";
 import type { NFTResponse } from "./types/nft";
 
+interface Collection {
+  address: string;
+  name: string;
+  image?: string;
+  totalListens: number;
+  description?: string;
+}
+
+interface NFTWithListens {
+  address: string;
+  index?: number;
+  metadata?: {
+    name?: string;
+    image?: string;
+    description?: string;
+    attributes?: any[];
+    animation_url?: string;
+    audio_url?: string;
+    [key: string]: any;
+  };
+  collection?: {
+    name?: string;
+    address?: string;
+  };  
+  trust?: string; 
+  audioUrl?: string;
+  listens: number;
+}
+
 export class BackendApi {
      
-    baseUrl = 'https://pttrns-backend-ts.vercel.app';
+    baseUrl = 'http://localhost:3000';
 
     async generatePayload(): Promise<string | undefined> {
         try {
@@ -107,6 +136,115 @@ export class BackendApi {
             return await response.json();
         } catch (e) {
             console.error('Ошибка при генерации музыкального API ключа:', e);
+            return undefined;
+        }
+    }
+
+    // Новый метод для получения коллекций с прослушиваниями
+    async getCollections(): Promise<{collections: Collection[]} | undefined> {
+        try {
+            const response = await fetch(`${this.baseUrl}/api/collections`, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            return await response.json();
+        } catch (e) {
+            console.error('Ошибка при получении коллекций:', e);
+            return undefined;
+        }
+    }
+
+    // Новый метод для получения топ NFT в коллекции
+    async getTopNftsInCollection(collectionAddress: string, limit: number = 7): Promise<{nfts: NFTWithListens[]} | undefined> {
+        try {
+            const response = await fetch(`${this.baseUrl}/api/collections/${collectionAddress}/top-nfts?limit=${limit}`, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            return await response.json();
+        } catch (e) {
+            console.error('Ошибка при получении топ NFT коллекции:', e);
+            return undefined;
+        }
+    }
+
+    // Новый метод для записи прослушивания
+    async recordListen(nftAddress: string, collectionAddress: string): Promise<boolean> {
+        try {
+            const response = await fetch(`${this.baseUrl}/api/listens`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    nftAddress,
+                    collectionAddress
+                })
+            });
+
+            return response.ok;
+        } catch (e) {
+            console.error('Ошибка при записи прослушивания:', e);
+            return false;
+        }
+    }
+
+    // Новый метод для получения статистики
+    async getStats(): Promise<{totalNftsListened: number, totalListens: number, totalCollections: number} | undefined> {
+        try {
+            const response = await fetch(`${this.baseUrl}/api/stats`, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            return await response.json();
+        } catch (e) {
+            console.error('Ошибка при получении статистики:', e);
+            return undefined;
+        }
+    }
+
+    // Новый метод для получения статуса синхронизации
+    async getSyncStatus(): Promise<any | undefined> {
+        try {
+            const response = await fetch(`${this.baseUrl}/api/sync-status`, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            return await response.json();
+        } catch (e) {
+            console.error('Ошибка при получении статуса синхронизации:', e);
             return undefined;
         }
     }
