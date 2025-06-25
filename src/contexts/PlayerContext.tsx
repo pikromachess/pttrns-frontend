@@ -1,33 +1,35 @@
-// src/contexts/PlayerContext.tsx
 import { 
   createContext, 
   useContext, 
   useState, 
+  useRef, 
   useEffect, 
-  useCallback,
-  useRef  
+  useCallback  
 } from 'react';
 
 import type { PlayerContextType, PlayerProviderProps } from '../types/player';
 import type { NFT } from '../types/nft';
 import { BackendTokenContext } from '../BackendTokenContext';
-
-// Импортируем наши новые хуки
-import { useAudioPlayer } from '../hooks/useAudioPlayer';
-import { useMusicCache } from '../hooks/useMusicCache';
-import { useListenTracker } from '../hooks/useListenTracker';
-import { useMusicApiKey } from '../hooks/useMusicApiKey';
-import { usePlaylistManager } from '../hooks/usePlaylistManager';
-import { useProgressTimer } from '../hooks/useProgressTimer';
-
-// Импортируем сервисы
-import { musicGenerationService } from '../services/musicGenerationService';
-import { listenRecordService } from '../services/listenRecordService';
+import { backendApi } from '../backend-api';
 
 const PlayerContext = createContext<PlayerContextType | undefined>(undefined);
 
+// Кеш для музыкальных API ключей
+let musicApiKeyCache: {
+  key: string;
+  expiresAt: Date;
+  serverUrl: string;
+} | null = null;
+
+// Кеш для сгенерированной музыки
+const musicCache = new Map<string, string>();
+
+// Трекер прослушиваний для избежания дублирования - используем Set с временными метками
+const listenTracker = new Map<string, number>();
+
 export function PlayerProvider({ children }: PlayerProviderProps) {
-  // Основное состояние плеера
+  const [currentNft, setCurrentNft] = useState<NFT | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [isPlayerVisible, setIsPlayerVisible] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(180);
@@ -41,163 +43,146 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const { token } = useContext(BackendTokenContext);
-  
-  // Ref для отслеживания монтирования
   const isMountedRef = useRef(true);
+  const playNextTrackRef = useRef<(() => Promise<void>) | null>(null);
+  const listenRecordedRef = useRef(false);
 
-  // Инициализируем хуки
-  const musicCache = useMusicCache({ maxSize: 50, maxAge: 30 * 60 * 1000 });
-  const listenTracker = useListenTracker();
-  const musicApiKey = useMusicApiKey();
-
-  // Хук управления плейлистом
-  const playlistManager = usePlaylistManager({
-    onTrackChange: useCallback((nft: NFT, index: number) => {
-      console.log('🎵 Трек изменился:', { name: nft.metadata?.name, index });
-    }, []),
-    onPlaylistUpdate: useCallback((playlist: NFT[]) => {
-      console.log('📋 Плейлист обновлен:', playlist.length, 'треков');
-    }, [])
-  });
-
-  // Хук таймера прогресса
-  const progressTimer = useProgressTimer({
-    onTimeUpdate: useCallback(() => {
-      // Обновления времени обрабатываются автоматически через audioPlayer
-    }, []),
-    onTrackEnd: useCallback(() => {
-      console.log('🔄 Трек завершен, переключаемся на следующий');
-      handleTrackEnd();
-    }, []), // Добавим handleTrackEnd в зависимости позже
-    onListenThresholdReached: useCallback((currentTime: number, duration: number) => {
-      const currentNft = playlistManager.getCurrentTrack();
-      if (currentNft && listenTracker.shouldRecord(currentNft, currentTime, duration)) {
-        recordListen(currentNft);
-      }
-    }, [playlistManager, listenTracker]) // Стабильные зависимости
-  });
-
-  // Хук аудио плеера
-  const audioPlayer = useAudioPlayer({
-    onTimeUpdate: useCallback((time: number, duration: number) => {
-      // Дополнительная логика при обновлении времени
-      const currentNft = playlistManager.getCurrentTrack();
-      if (currentNft && listenTracker.shouldRecord(currentNft, time, duration)) {
-        recordListen(currentNft);
-      }
-    }, [playlistManager, listenTracker]),
-    onPlaying: useCallback(() => {
-      progressTimer.start(audioPlayer.audioRef.current);
-    }, [progressTimer]),
-    onPause: useCallback(() => {
-      progressTimer.pause();
-    }, [progressTimer]),
-    onEnded: useCallback(() => {
-      handleTrackEnd();
-    }, []), // Добавим handleTrackEnd в зависимости позже
-    onError: useCallback((error: string) => {
-      console.error('❌ Ошибка аудио плеера:', error);
-      setIsLoadingTrack(false);
-      // Попробуем переключиться на следующий трек при ошибке
-      if (!playlistManager.isEmpty()) {
-        setTimeout(() => handleTrackEnd(), 1000);
-      }
-    }, [playlistManager]),
-    onLoadedMetadata: useCallback((duration: number) => {
-      progressTimer.setDuration(duration);
-    }, [progressTimer])
-  });
-
-  // Функция записи прослушивания
+  // Функция для записи прослушивания с улучшенной логикой
   const recordListen = useCallback(async (nft: NFT) => {
-    if (!listenTracker.canRecord(nft)) return;
+    console.log('🎵 Попытка записи прослушивания для NFT:', {
+      name: nft.metadata?.name,
+      address: nft.address,
+      collectionAddress: nft.collection?.address
+    });
 
-    try {
-      listenTracker.markAsRecorded(nft);
-      const success = await listenRecordService.recordListen(nft);
-      
-      if (!success) {
-        // Если запись не удалась, сбрасываем отметку
-        listenTracker.resetNft?.(nft);
-      }
-    } catch (error) {
-      console.error('❌ Ошибка записи прослушивания:', error);
-      // Сбрасываем отметку при ошибке
-      listenTracker.resetNft?.(nft);
+    if (!nft.address || !nft.collection?.address) {
+      console.warn('❌ Недостаточно данных для записи прослушивания:', {
+        hasAddress: !!nft.address,
+        hasCollectionAddress: !!nft.collection?.address
+      });
+      return;
     }
-  }, [listenTracker]);
 
-  // Обработка завершения трека
-  const handleTrackEnd = useCallback(async () => {
-    if (!isMountedRef.current) return;
-
-    const nextTrack = playlistManager.getNextTrack();
+    const now = Date.now();
+    const lastRecorded = listenTracker.get(nft.address);
     
-    if (nextTrack) {
-      await playNextTrack();
-    } else {
-      // Плейлист закончился
-      closePlayer();
-    }
-  }, [playlistManager]);
-
-  // Генерация музыки для NFT
-  const generateMusicForNft = useCallback(async (nft: NFT): Promise<string> => {
-    if (!token) {
-      throw new Error('Необходима авторизация для генерации музыки');
-    }
-
-    // Проверяем кеш
-    const cachedUrl = musicCache.get(nft);
-    if (cachedUrl) {
-      console.log('💾 Используем закешированную музыку для:', nft.metadata?.name);
-      return cachedUrl;
-    }
-
-    // Генерируем новую музыку
-    console.log('🎼 Генерируем музыку для:', nft.metadata?.name);
-    
-    const audioUrl = await musicGenerationService.generateMusicWithRetry(
-      nft,
-      () => musicApiKey.getValidKey(token),
-      () => musicApiKey.refreshKey(token)
-    );
-
-    // Кешируем результат
-    musicCache.set(nft, audioUrl);
-    
-    return audioUrl;
-  }, [token, musicCache, musicApiKey]);
-
-  // Предзагрузка следующего трека
-  const preloadNextTrack = useCallback(async () => {
-    const nextTrack = playlistManager.getNextTrack();
-    if (!nextTrack || !token) return;
-
-    // Проверяем, нет ли уже в кеше
-    if (musicCache.has(nextTrack)) {
-      console.log('💾 Следующий трек уже закеширован');
+    // Проверяем, что с последней записи прошло минимум 30 секунд
+    if (lastRecorded && (now - lastRecorded) < 30000) {
+      console.log('⏰ Прослушивание уже записано недавно для этого NFT');
       return;
     }
 
     try {
-      console.log('⏳ Предзагружаем следующий трек:', nextTrack.metadata?.name);
-      await musicGenerationService.preloadMusic(
-        nextTrack,
-        () => musicApiKey.getValidKey(token),
-        (url) => musicCache.set(nextTrack, url),
-        (error) => console.error('❌ Ошибка предзагрузки:', error)
+      listenTracker.set(nft.address, now);
+      
+      console.log('📤 Отправляем запрос на запись прослушивания:', {
+        nftAddress: nft.address,
+        collectionAddress: nft.collection.address
+      });
+      
+      const success = await backendApi.recordListen(nft.address, nft.collection.address);
+      
+      if (success) {
+        console.log('✅ Прослушивание успешно записано для NFT:', nft.metadata?.name);
+      } else {
+        console.error('❌ Ошибка записи прослушивания - сервер вернул false');
+        // Убираем из трекера при ошибке, чтобы можно было попробовать еще раз
+        listenTracker.delete(nft.address);
+      }
+    } catch (error) {
+      console.error('❌ Ошибка при записи прослушивания:', error);
+      // Убираем из трекера при ошибке, чтобы можно было попробовать еще раз
+      listenTracker.delete(nft.address);
+    }
+  }, []);
+
+  // Обновляем громкость аудио элемента при изменении состояния
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = isMuted ? 0 : volume;
+    }
+  }, [volume, isMuted]);
+
+  // Функция для изменения громкости
+  const changeVolume = useCallback((newVolume: number) => {
+    const clampedVolume = Math.max(0, Math.min(1, newVolume));
+    setVolume(clampedVolume);
+    if (clampedVolume > 0 && isMuted) {
+      setIsMuted(false);
+    }
+    if (audioRef.current) {
+      audioRef.current.volume = clampedVolume;
+    }
+  }, [isMuted]);
+
+  // Функция для переключения режима без звука
+  const toggleMute = useCallback(() => {
+    if (isMuted) {
+      setIsMuted(false);
+      setVolume(previousVolume);
+      if (audioRef.current) {
+        audioRef.current.volume = previousVolume;
+      }
+    } else {
+      setPreviousVolume(volume);
+      setIsMuted(true);
+      if (audioRef.current) {
+        audioRef.current.volume = 0;
+      }
+    }
+  }, [isMuted, volume, previousVolume]);
+
+  // Обновленная функция для формирования плейлиста
+  const updatePlaylist = useCallback((nfts: NFT[]) => {
+    console.log('📝 Обновляем плейлист:', nfts.length, 'треков');
+    setPlaylist(nfts);
+    
+    // Если есть текущий трек, находим его индекс в новом плейлисте
+    if (currentNft) {
+      const newIndex = nfts.findIndex(nft => 
+        nft.address === currentNft.address || nft.index === currentNft.index
       );
+      if (newIndex !== -1) {
+        setCurrentTrackIndex(newIndex);
+      }
+    }
+  }, [currentNft]);
+
+  // Функция для получения кеш-ключа NFT
+  const getNftCacheKey = useCallback((nft: NFT): string => {
+    return nft.address || `index-${nft.index}`;
+  }, []);
+
+  // Предзагрузка следующего трека
+  const preloadNextTrack = useCallback(async (index: number) => {
+    if (!token || playlist.length === 0) return;
+    
+    const nextIndex = (index + 1) % playlist.length;
+    const nextNft = playlist[nextIndex];
+    const cacheKey = getNftCacheKey(nextNft);
+    
+    // Если трек уже закеширован, не генерируем повторно
+    if (musicCache.has(cacheKey)) {
+      console.log('💾 Следующий трек уже закеширован:', nextNft.metadata?.name);
+      return;
+    }
+    
+    try {
+      console.log('⏳ Предзагружаем следующий трек:', nextNft.metadata?.name);
+      const audioUrl = await generateMusicWithToken(nextNft, token);
+      musicCache.set(cacheKey, audioUrl);
+      console.log('✅ Следующий трек успешно предзагружен');
     } catch (error) {
       console.error('❌ Ошибка предзагрузки следующего трека:', error);
     }
-  }, [playlistManager, musicCache, musicApiKey, token]);
+  }, [token, playlist, getNftCacheKey]);
 
   // Основная функция воспроизведения с правильной логикой загрузки
   const playNft = async (nft: NFT, nfts: NFT[] = []) => {
     console.log('🎯 Запуск воспроизведения NFT:', {
       name: nft.metadata?.name,
       address: nft.address,
+      collectionAddress: nft.collection?.address,
       playlistSize: nfts.length
     });
     
@@ -597,8 +582,10 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
       }
       
       // Предзагружаем следующий трек
-      preloadNextTrack();
-
+      if (playlist.length > 1) {
+        preloadNextTrack(nextIndex);
+      }
+      
     } catch (error) {
       console.error('❌ Ошибка воспроизведения следующего трека:', error);
       setIsLoadingTrack(false);
@@ -617,13 +604,22 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
         closePlayer();
       }
     }
-  }, [playlistManager, generateMusicForNft, audioPlayer, progressTimer, preloadNextTrack]);
+  };
 
-  // Переключение на предыдущий трек
-  const playPreviousTrack = useCallback(async () => {
-    const prevNft = playlistManager.moveToPrevious();
-    if (!prevNft) {
-      console.log('🔴 Предыдущий трек не найден');
+  useEffect(() => {
+    playNextTrackRef.current = playNextTrack;
+  }, [playNextTrack]);
+
+  // Улучшенная функция переключения на предыдущий трек
+  const playPreviousTrack = async () => {
+    if (playlist.length === 0) {
+      console.log('🔴 Плейлист пуст, закрываем плеер');
+      closePlayer();
+      return;
+    }
+    
+    if (!token) {
+      console.error('❌ Отсутствует токен авторизации');
       return;
     }
     
@@ -736,19 +732,19 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
     }
   };
 
-  // Обновление плейлиста
-  const updatePlaylist = useCallback((nfts: NFT[]) => {
-    playlistManager.updatePlaylist(nfts);
-  }, [playlistManager]);
-
-  // Исправляем зависимости в useEffect - очистка только при размонтировании
+  // Очистка при размонтировании
   useEffect(() => {
     isMountedRef.current = true;
-    
     return () => {
       isMountedRef.current = false;
-      // Очищаем ресурсы только при размонтировании компонента
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = '';
+      }
+      // Очищаем кеш музыки при размонтировании
       musicCache.clear();
+      // Очищаем трекер прослушиваний
       listenTracker.clear();
     };
   }, []);
@@ -801,13 +797,11 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
       audio.removeEventListener('canplay', handleCanPlay);
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
     };
-  }, []); // Пустой массив зависимостей!
+  }, [currentTrackIndex, playlist, playNextTrack]);
 
-  // Значение контекста
   const value: PlayerContextType = {
-    // Состояние
-    currentNft: playlistManager.getCurrentTrack(),
-    isPlaying: audioPlayer.state.isPlaying,
+    currentNft,
+    isPlaying,
     isPlayerVisible,
     progress,
     duration,
@@ -829,7 +823,11 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
 
   return (
     <PlayerContext.Provider value={value}>
-      <audio ref={audioPlayer.audioRef} style={{ display: 'none' }} />
+      <audio 
+        ref={audioRef} 
+        preload="metadata"
+        crossOrigin="anonymous"
+      />
       {children}
     </PlayerContext.Provider>
   );
@@ -841,4 +839,100 @@ export const usePlayer = (): PlayerContextType => {
     throw new Error('usePlayer must be used within PlayerProvider');
   }
   return context;
+};
+
+// Создаем отдельную функцию для генерации музыки с токеном
+export const generateMusicWithToken = async (nft: NFT, authToken: string): Promise<string> => {
+  try {
+    // Проверяем кеш музыкального API ключа
+    let apiKey: string | null = null;
+    let serverUrl: string | null = null;
+
+    if (musicApiKeyCache && new Date() < musicApiKeyCache.expiresAt) {
+      apiKey = musicApiKeyCache.key;
+      serverUrl = musicApiKeyCache.serverUrl;
+    } else {
+      // Получаем новый музыкальный API ключ
+      console.log('🔑 Получение нового музыкального API ключа...');
+      const keyData = await backendApi.generateMusicApiKey(authToken);
+      
+      if (!keyData) {
+        throw new Error('Не удалось получить музыкальный API ключ');
+      }
+
+      musicApiKeyCache = {
+        key: keyData.apiKey,
+        expiresAt: new Date(keyData.expiresAt),
+        serverUrl: keyData.musicServerUrl
+      };
+
+      apiKey = keyData.apiKey;
+      serverUrl = keyData.musicServerUrl;
+    }
+
+    console.log('🎼 Отправляем запрос на генерацию музыки с API ключом для NFT:', nft.metadata?.name);
+    
+    const response = await fetch(`${serverUrl}/generate-music-stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Music-Api-Key': apiKey,
+      },
+      body: JSON.stringify({
+        metadata: nft.metadata,
+        index: nft.index
+      })
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        // Ключ истек, очищаем кеш и пробуем еще раз
+        musicApiKeyCache = null;
+        console.log('🔑 API ключ истек, получаем новый...');
+        
+        const keyData = await backendApi.generateMusicApiKey(authToken);
+        if (!keyData) {
+          throw new Error('Не удалось обновить музыкальный API ключ');
+        }
+
+        musicApiKeyCache = {
+          key: keyData.apiKey,
+          expiresAt: new Date(keyData.expiresAt),
+          serverUrl: keyData.musicServerUrl
+        };
+
+        // Повторный запрос с новым ключом
+        const retryResponse = await fetch(`${keyData.musicServerUrl}/generate-music-stream`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Music-Api-Key': keyData.apiKey,
+          },
+          body: JSON.stringify({
+            metadata: nft.metadata,
+            index: nft.index
+          })
+        });
+
+        if (!retryResponse.ok) {
+          throw new Error(`Ошибка сервера после обновления ключа: ${retryResponse.status}`);
+        }
+
+        const audioBlob = await retryResponse.blob();
+        return URL.createObjectURL(audioBlob);
+      } else if (response.status === 403) {
+        throw new Error('Нет доступа к генерации музыки');
+      } else if (response.status === 503) {
+        throw new Error('Сервис генерации музыки временно недоступен');
+      }
+      throw new Error(`Ошибка сервера: ${response.status}`);
+    }
+
+    const audioBlob = await response.blob();
+    console.log('✅ Музыка успешно сгенерирована для NFT:', nft.metadata?.name);
+    return URL.createObjectURL(audioBlob);
+  } catch (error) {
+    console.error('❌ Ошибка генерации музыки:', error);
+    throw error;
+  }
 };

@@ -1,5 +1,5 @@
 import { useState, useCallback, useContext } from 'react';
-import { usePlayer } from '../contexts/PlayerContext';
+import { usePlayer, generateMusicWithToken } from '../contexts/PlayerContext';
 import { BackendTokenContext } from '../BackendTokenContext';
 import type { NFT } from '../types/nft';
 
@@ -66,6 +66,9 @@ export function useMusicGeneration() {
         window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
       }
       
+      const audioUrl = await generateMusicWithToken(nftToPlay, token);
+      console.log('🎼 Музыка сгенерирована, начинаем воспроизведение');
+      
       // Убеждаемся, что все NFT в плейлисте имеют правильную информацию о коллекции
       const enrichedPlaylist = allNfts.map(playlistNft => {
         // Если у NFT в плейлисте нет коллекции, но мы знаем коллекцию из контекста
@@ -106,7 +109,7 @@ export function useMusicGeneration() {
       });
       
       // Запускаем воспроизведение с правильным плейлистом
-      await playNft(nftToPlay, orderedPlaylist);
+      await playNft({ ...nftToPlay, audioUrl }, orderedPlaylist);
       
     } catch (error) {
       console.error('❌ Ошибка генерации музыки:', error);

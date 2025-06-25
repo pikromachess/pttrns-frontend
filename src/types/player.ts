@@ -11,6 +11,7 @@ export interface PlayerContextType {
   volume: number;
   isMuted: boolean;
   playlist: NFT[];
+  isLoadingTrack: boolean;
   updatePlaylist: (nfts: NFT[]) => void;
   playNft: (nft: NFT, nfts?: NFT[]) => Promise<void>;
   togglePlay: () => void;
