@@ -29,9 +29,17 @@ const PlayerContext = createContext<PlayerContextType | undefined>(undefined);
 export function PlayerProvider({ children }: PlayerProviderProps) {
   // Основное состояние плеера
   const [isPlayerVisible, setIsPlayerVisible] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(180);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [volume, setVolume] = useState(0.8);
+  const [isMuted, setIsMuted] = useState(false);
+  const [previousVolume, setPreviousVolume] = useState(0.8);
+  const [playlist, setPlaylist] = useState<NFT[]>([]);
+  const [currentTrackIndex, setCurrentTrackIndex] = useState(-1);
   const [isLoadingTrack, setIsLoadingTrack] = useState(false);
-  
-  // Контекст авторизации
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const { token } = useContext(BackendTokenContext);
   
   // Ref для отслеживания монтирования
@@ -185,78 +193,426 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
     }
   }, [playlistManager, musicCache, musicApiKey, token]);
 
-  // Основная функция воспроизведения
-  const playNft = useCallback(async (nft: NFT, nfts: NFT[] = []) => {
-    if (!token) {
-      console.error('❌ Отсутствует токен авторизации');
-      return;
-    }
-
+  // Основная функция воспроизведения с правильной логикой загрузки
+  const playNft = async (nft: NFT, nfts: NFT[] = []) => {
     console.log('🎯 Запуск воспроизведения NFT:', {
       name: nft.metadata?.name,
       address: nft.address,
       playlistSize: nfts.length
     });
+    
+    // КРИТИЧЕСКИ ВАЖНО: Сбрасываем флаг записи прослушивания для НОВОГО трека
+    listenRecordedRef.current = false;
+    
+    // ВАЖНО: Убеждаемся, что у NFT есть правильная информация о коллекции
+    let enrichedNft = { ...nft };
+    
+    // Если коллекция отсутствует, но есть в плейлисте, берем оттуда
+    if (!enrichedNft.collection?.address && nfts.length > 0) {
+      const nftInPlaylist = nfts.find(n => n.address === nft.address);
+      if (nftInPlaylist?.collection?.address) {
+        enrichedNft.collection = nftInPlaylist.collection;
+        console.log('🔧 Дополнили информацию о коллекции из плейлиста:', enrichedNft.collection.address);
+      }
+    }
+    
+    // Логируем финальные данные NFT для отладки
+    console.log('🎵 Финальные данные NFT для воспроизведения:', {
+      name: enrichedNft.metadata?.name,
+      address: enrichedNft.address,
+      collectionName: enrichedNft.collection?.name,
+      collectionAddress: enrichedNft.collection?.address
+    });
+    
+    // Формируем плейлист в правильном порядке
+    const orderedPlaylist = nfts.length > 0 ? nfts : [enrichedNft];
+    const selectedIndex = orderedPlaylist.findIndex(item => 
+      item.address === enrichedNft.address || 
+      (item.index === enrichedNft.index && !item.address && !enrichedNft.address)
+    );
+    
+    const startIndex = selectedIndex !== -1 ? selectedIndex : 0;
+    
+    console.log('📋 Устанавливаем плейлист:', {
+      total: orderedPlaylist.length,
+      startIndex,
+      currentTrack: enrichedNft.metadata?.name,
+      collectionAddress: enrichedNft.collection?.address
+    });
+    
+    setPlaylist(orderedPlaylist);
+    setCurrentTrackIndex(startIndex);
+    setCurrentNft(enrichedNft); // ВАЖНО: Используем обогащенный NFT
+    setIsPlayerVisible(true);
+    
+    // Устанавливаем состояние загрузки
+    setIsLoadingTrack(true);
+    setIsPlaying(false); // ВАЖНО: ставим на паузу пока не загрузился трек
+    
+    setProgress(0);
+    setCurrentTime(0);
+    setDuration(180);
 
-    try {
-      setIsLoadingTrack(true);
-      setIsPlayerVisible(true);
+    // Получаем аудио URL для текущего трека
+    const cacheKey = getNftCacheKey(enrichedNft);
+    let audioUrl = enrichedNft.audioUrl;
+    
+    // Если аудио нет в NFT, проверяем кеш или генерируем
+    if (!audioUrl) {
+      if (musicCache.has(cacheKey)) {
+        audioUrl = musicCache.get(cacheKey)!;
+        console.log('💾 Используем закешированный аудио для:', enrichedNft.metadata?.name);
+      } else {
+        try {
+          console.log('🎼 Генерируем музыку для текущего трека:', enrichedNft.metadata?.name);
+          audioUrl = await generateMusicWithToken(enrichedNft, token!);
+          musicCache.set(cacheKey, audioUrl);
+        } catch (error) {
+          console.error('❌ Ошибка генерации музыки:', error);
+          setIsLoadingTrack(false);
+          setIsPlaying(false);
+          return;
+        }
+      }
+    }
 
-      // Обновляем плейлист
-      const finalPlaylist = nfts.length > 0 ? nfts : [nft];
-      playlistManager.updatePlaylist(finalPlaylist, nft);
+    // Воспроизводим текущий трек
+    if (audioRef.current && audioUrl) {
+      try {
+        await audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+        audioRef.current.src = audioUrl;
+        audioRef.current.volume = isMuted ? 0 : volume;
+        
+        // Обновляем длительность при загрузке метаданных
+        audioRef.current.addEventListener('loadedmetadata', () => {
+          if (audioRef.current) {
+            const newDuration = audioRef.current.duration || 180;
+            setDuration(newDuration);
+            console.log('📊 Длительность трека обновлена:', {
+              trackName: enrichedNft.metadata?.name,
+              duration: newDuration,
+              listenThreshold: Math.min(30, newDuration * 0.8)
+            });
+          }
+        }, { once: true });
 
-      // Генерируем музыку
-      const audioUrl = await generateMusicForNft(nft);
+        // Добавляем обработчик успешного начала воспроизведения
+        audioRef.current.addEventListener('playing', () => {
+          console.log('▶️ Основной трек начал воспроизводиться');
+          setIsLoadingTrack(false);
+          setIsPlaying(true);
+          startProgressTimer();
+        }, { once: true });
+        
+        // Добавляем обработчик ошибки загрузки
+        audioRef.current.addEventListener('error', () => {
+          console.log('❌ Ошибка загрузки основного трека');
+          setIsLoadingTrack(false);
+          setIsPlaying(false);
+        }, { once: true });
 
-      // Загружаем и воспроизводим трек
-      await audioPlayer.controls.loadTrack(audioUrl);
-      await audioPlayer.controls.play();
+        const playPromise = audioRef.current.play();
+        if (playPromise !== undefined) {
+          await playPromise;
+          // Если play() успешен, но событие 'playing' может еще не сработать
+          setTimeout(() => {
+            if (audioRef.current && !audioRef.current.paused) {
+              setIsLoadingTrack(false);
+              setIsPlaying(true);
+              startProgressTimer();
+            }
+          }, 100);
+        }
+      } catch (error) {
+        console.error('❌ Ошибка воспроизведения:', error);
+        setIsLoadingTrack(false);
+        setIsPlaying(false);
+      }
+    }
 
-      setIsLoadingTrack(false);
+    // Предзагружаем следующий трек
+    if (orderedPlaylist.length > 1) {
+      preloadNextTrack(startIndex);
+    }
+  };
 
-      // Предзагружаем следующий трек
-      if (finalPlaylist.length > 1) {
-        preloadNextTrack();
+  const startProgressTimer = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+    }
+    
+    intervalRef.current = setInterval(() => {
+      if (!audioRef.current) {
+        // Fallback режим без аудио элемента
+        setCurrentTime(prev => {
+          const newTime = prev + 1;
+          
+          // Условия для записи прослушивания:
+          // 1. Прослушано 30+ секунд ИЛИ
+          // 2. Прослушано 80%+ от общей длительности трека (для коротких треков)
+          const listenThreshold = Math.min(30, duration * 0.8);
+          
+          if (newTime >= listenThreshold && !listenRecordedRef.current && currentNft) {
+            console.log('⏰ Условие прослушивания выполнено (fallback режим):', {
+              currentTime: newTime,
+              duration,
+              threshold: listenThreshold,
+              trackName: currentNft.metadata?.name,
+              nftAddress: currentNft.address,
+              collectionAddress: currentNft.collection?.address
+            });
+            listenRecordedRef.current = true;
+            recordListen(currentNft);
+          }
+          
+          if (newTime >= duration - 1) {
+            console.log('🔄 Трек завершен (fallback), переключаемся на следующий');
+            playNextTrackRef.current?.();
+            return 0;
+          }
+          setProgress((newTime / duration) * 100);
+          return newTime;
+        });
+        return;
       }
 
-    } catch (error) {
-      console.error('❌ Ошибка воспроизведения:', error);
-      setIsLoadingTrack(false);
-      // Не закрываем плеер, чтобы пользователь мог попробовать другой трек
-    }
-  }, [token, playlistManager, generateMusicForNft, audioPlayer, preloadNextTrack]);
+      // Основной режим с аудио элементом
+      const actualTime = audioRef.current.currentTime;
+      const actualDuration = audioRef.current.duration || duration;
+      
+      // Условия для записи прослушивания:
+      // 1. Прослушано 30+ секунд ИЛИ
+      // 2. Прослушано 80%+ от общей длительности трека (для коротких треков)
+      const listenThreshold = Math.min(30, actualDuration * 0.8);
+      
+      if (actualTime >= listenThreshold && !listenRecordedRef.current && currentNft) {
+        console.log('⏰ Условие прослушивания выполнено:', {
+          actualTime,
+          actualDuration,
+          threshold: listenThreshold,
+          trackName: currentNft.metadata?.name,
+          nftAddress: currentNft.address,
+          collectionAddress: currentNft.collection?.address
+        });
+        
+        // ВАЖНО: Создаем копию currentNft на момент записи для избежания race conditions
+        const nftToRecord = { ...currentNft };
+        listenRecordedRef.current = true;
+        recordListen(nftToRecord);
+      }
+      
+      // Проверяем, достигли ли конца трека
+      if (actualTime >= actualDuration - 0.5) {
+        console.log('🔄 Трек завершен, переключаемся на следующий');
+        
+        // Если трек завершен, но прослушивание еще не записано (очень короткий трек)
+        if (!listenRecordedRef.current && currentNft && actualTime >= actualDuration * 0.5) {
+          console.log('📝 Записываем прослушивание для завершенного короткого трека');
+          const nftToRecord = { ...currentNft };
+          listenRecordedRef.current = true;
+          recordListen(nftToRecord);
+        }
+        
+        playNextTrackRef.current?.();
+        return;
+      }
+      
+      // Обновляем прогресс и время только если аудио играет
+      if (!audioRef.current.paused) {
+        setCurrentTime(actualTime);
+        setProgress((actualTime / actualDuration) * 100);
+        
+        // Обновляем длительность, если она изменилась
+        if (actualDuration !== duration && !isNaN(actualDuration)) {
+          setDuration(actualDuration);
+        }
+      }
+    }, 1000);
+  }, [duration, currentNft, recordListen]);
 
-  // Переключение на следующий трек
-  const playNextTrack = useCallback(async () => {
-    const nextNft = playlistManager.moveToNext();
-    if (!nextNft) {
-      console.log('🔴 Следующий трек не найден');
+  const togglePlay = useCallback(() => {
+    if (isPlaying) {
+      setIsPlaying(false);
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    } else {
+      setIsPlaying(true);
+      if (audioRef.current) {
+        audioRef.current.play().catch(error => {
+          console.error('❌ Ошибка воспроизведения:', error);
+          setIsPlaying(false);
+        });
+      }
+      startProgressTimer();
+    }
+  }, [isPlaying, startProgressTimer]);
+
+  const seekTo = useCallback((percentage: number) => {
+    const newTime = (percentage / 100) * duration;
+    
+    console.log('⏩ Seeking to:', { percentage, newTime, duration });
+    
+    // Обновляем состояние
+    setCurrentTime(newTime);
+    setProgress(percentage);
+    
+    // Применяем к аудио элементу
+    if (audioRef.current) {
+      audioRef.current.currentTime = newTime;
+    }
+    
+    // Перезапускаем таймер прогресса, если музыка играет
+    if (isPlaying) {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+      startProgressTimer();
+    }
+  }, [duration, isPlaying, startProgressTimer]);
+
+  const closePlayer = () => {
+    if (currentNft?.audioUrl) {
+      URL.revokeObjectURL(currentNft.audioUrl);
+    }
+
+    setIsPlayerVisible(false);
+    setIsPlaying(false);
+    setCurrentNft(null);
+    setCurrentTrackIndex(-1);
+    setIsLoadingTrack(false);
+    listenRecordedRef.current = false;
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = '';
+    }
+  };
+
+  // Улучшенная функция переключения на следующий трек
+  const playNextTrack = async () => {
+    if (playlist.length === 0) {
+      console.log('🔴 Плейлист пуст, закрываем плеер');
       closePlayer();
       return;
     }
+    
+    if (!token) {
+      console.error('❌ Отсутствует токен авторизации');
+      return;
+    }
+    
+    const nextIndex = (currentTrackIndex + 1) % playlist.length;
+    const nextNft = playlist[nextIndex];
+    const cacheKey = getNftCacheKey(nextNft);
+    
+    console.log('⏭️ Переключаемся на следующий трек:', {
+      currentIndex: currentTrackIndex,
+      nextIndex,
+      trackName: nextNft.metadata?.name,
+      playlistLength: playlist.length,
+      collectionAddress: nextNft.collection?.address
+    });
 
+    if (!isMountedRef.current) return;
+    
+    // КРИТИЧЕСКИ ВАЖНО: Сбрасываем флаг записи прослушивания для НОВОГО трека
+    listenRecordedRef.current = false;
+    
+    // Устанавливаем состояние загрузки
+    setIsLoadingTrack(true);
+    setIsPlaying(false); // ВАЖНО: ставим на паузу пока не загрузился трек
+    
+    setCurrentTrackIndex(nextIndex);
+    setCurrentNft(nextNft);
+    setProgress(0);
+    setCurrentTime(0);
+    setDuration(180);
+    
     try {
-      setIsLoadingTrack(true);
-      progressTimer.stop();
-
-      const audioUrl = await generateMusicForNft(nextNft);
-      await audioPlayer.controls.loadTrack(audioUrl);
-      await audioPlayer.controls.play();
-
-      setIsLoadingTrack(false);
-
+      let audioUrl: string;
+      
+      // Проверяем кеш
+      if (musicCache.has(cacheKey)) {
+        audioUrl = musicCache.get(cacheKey)!;
+        console.log('💾 Используем закешированный трек');
+      } else {
+        console.log('🎼 Генерируем музыку для следующего трека');
+        audioUrl = await generateMusicWithToken(nextNft, token);
+        musicCache.set(cacheKey, audioUrl);
+      }
+      
+      // Воспроизводим следующий трек
+      if (audioRef.current) {
+        await audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+        audioRef.current.src = audioUrl;
+        audioRef.current.volume = isMuted ? 0 : volume;
+        
+        // Обновляем длительность
+        audioRef.current.addEventListener('loadedmetadata', () => {
+          if (audioRef.current) {
+            const newDuration = audioRef.current.duration || 180;
+            setDuration(newDuration);
+            console.log('📊 Длительность следующего трека:', {
+              trackName: nextNft.metadata?.name,
+              duration: newDuration
+            });
+          }
+        }, { once: true });
+        
+        // Добавляем обработчик успешного начала воспроизведения
+        audioRef.current.addEventListener('playing', () => {
+          console.log('▶️ Трек начал воспроизводиться');
+          setIsLoadingTrack(false);
+          setIsPlaying(true);
+          startProgressTimer();
+        }, { once: true });
+        
+        // Добавляем обработчик ошибки загрузки
+        audioRef.current.addEventListener('error', () => {
+          console.log('❌ Ошибка загрузки трека');
+          setIsLoadingTrack(false);
+          setIsPlaying(false);
+        }, { once: true });
+        
+        // Пытаемся начать воспроизведение
+        const playPromise = audioRef.current.play();
+        if (playPromise !== undefined) {
+          await playPromise;
+          // Если play() успешен, но событие 'playing' может еще не сработать
+          // Устанавливаем небольшую задержку для корректной работы
+          setTimeout(() => {
+            if (audioRef.current && !audioRef.current.paused) {
+              setIsLoadingTrack(false);
+              setIsPlaying(true);
+              startProgressTimer();
+            }
+          }, 100);
+        }
+      }
+      
       // Предзагружаем следующий трек
       preloadNextTrack();
 
     } catch (error) {
-      console.error('❌ Ошибка переключения на следующий трек:', error);
+      console.error('❌ Ошибка воспроизведения следующего трека:', error);
       setIsLoadingTrack(false);
+      setIsPlaying(false);
       
-      // Пробуем следующий трек
-      const hasNext = !playlistManager.isEmpty() && playlistManager.getNextTrack();
-      if (hasNext) {
-        setTimeout(() => playNextTrack(), 1000);
+      // Пробуем пропустить проблемный трек
+      if (playlist.length > 1) {
+        const skipIndex = (nextIndex + 1) % playlist.length;
+        if (skipIndex !== currentTrackIndex) { // Избегаем бесконечной рекурсии
+          console.log('⏭️ Пропускаем проблемный трек, пробуем следующий');
+          await playNextTrack();
+        } else {
+          closePlayer();
+        }
       } else {
         closePlayer();
       }
@@ -270,57 +626,115 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
       console.log('🔴 Предыдущий трек не найден');
       return;
     }
+    
+    const prevIndex = (currentTrackIndex - 1 + playlist.length) % playlist.length;
+    const prevNft = playlist[prevIndex];
+    const cacheKey = getNftCacheKey(prevNft);
+    
+    console.log('⏮️ Переключаемся на предыдущий трек:', {
+      currentIndex: currentTrackIndex,
+      prevIndex,
+      trackName: prevNft.metadata?.name,
+      playlistLength: playlist.length,
+      collectionAddress: prevNft.collection?.address
+    });
 
+    if (!isMountedRef.current) return;
+    
+    // Сбрасываем флаг записи прослушивания для нового трека
+    listenRecordedRef.current = false;
+    
+    // Устанавливаем состояние загрузки
+    setIsLoadingTrack(true);
+    setIsPlaying(false); // ВАЖНО: ставим на паузу пока не загрузился трек
+    
+    setCurrentTrackIndex(prevIndex);
+    setCurrentNft(prevNft);
+    setProgress(0);
+    setCurrentTime(0);
+    setDuration(180);
+    
     try {
-      setIsLoadingTrack(true);
-      progressTimer.stop();
-
-      const audioUrl = await generateMusicForNft(prevNft);
-      await audioPlayer.controls.loadTrack(audioUrl);
-      await audioPlayer.controls.play();
-
-      setIsLoadingTrack(false);
-
+      let audioUrl: string;
+      
+      // Проверяем кеш
+      if (musicCache.has(cacheKey)) {
+        audioUrl = musicCache.get(cacheKey)!;
+        console.log('💾 Используем закешированный трек');
+      } else {
+        console.log('🎼 Генерируем музыку для предыдущего трека');
+        audioUrl = await generateMusicWithToken(prevNft, token);
+        musicCache.set(cacheKey, audioUrl);
+      }
+      
+      // Воспроизводим предыдущий трек
+      if (audioRef.current) {
+        await audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+        audioRef.current.src = audioUrl;
+        audioRef.current.volume = isMuted ? 0 : volume;
+        
+        // Обновляем длительность
+        audioRef.current.addEventListener('loadedmetadata', () => {
+          if (audioRef.current) {
+            setDuration(audioRef.current.duration || 180);
+          }
+        }, { once: true });
+        
+        // Добавляем обработчик успешного начала воспроизведения
+        audioRef.current.addEventListener('playing', () => {
+          console.log('▶️ Предыдущий трек начал воспроизводиться');
+          setIsLoadingTrack(false);
+          setIsPlaying(true);
+          startProgressTimer();
+        }, { once: true });
+        
+        // Добавляем обработчик ошибки загрузки
+        audioRef.current.addEventListener('error', () => {
+          console.log('❌ Ошибка загрузки предыдущего трека');
+          setIsLoadingTrack(false);
+          setIsPlaying(false);
+        }, { once: true });
+        
+        // Пытаемся начать воспроизведение
+        const playPromise = audioRef.current.play();
+        if (playPromise !== undefined) {
+          await playPromise;
+          // Если play() успешен, но событие 'playing' может еще не сработать
+          setTimeout(() => {
+            if (audioRef.current && !audioRef.current.paused) {
+              setIsLoadingTrack(false);
+              setIsPlaying(true);
+              startProgressTimer();
+            }
+          }, 100);
+        }
+      }
+      
+      // Предзагружаем следующий трек
+      if (playlist.length > 1) {
+        preloadNextTrack(prevIndex);
+      }
+      
     } catch (error) {
-      console.error('❌ Ошибка переключения на предыдущий трек:', error);
+      console.error('❌ Ошибка воспроизведения предыдущего трека:', error);
       setIsLoadingTrack(false);
+      setIsPlaying(false);
+      
+      // Пробуем пропустить проблемный трек
+      if (playlist.length > 1) {
+        const skipIndex = (prevIndex - 1 + playlist.length) % playlist.length;
+        if (skipIndex !== currentTrackIndex) { // Избегаем бесконечной рекурсии
+          console.log('⏮️ Пропускаем проблемный трек, пробуем предыдущий');
+          await playPreviousTrack();
+        } else {
+          closePlayer();
+        }
+      } else {
+        closePlayer();
+      }
     }
-  }, [playlistManager, generateMusicForNft, audioPlayer, progressTimer]);
-
-  // Управление воспроизведением
-  const togglePlay = useCallback(() => {
-    if (audioPlayer.state.isPlaying) {
-      audioPlayer.controls.pause();
-    } else {
-      audioPlayer.controls.play();
-    }
-  }, [audioPlayer]);
-
-  // Перемотка
-  const seekTo = useCallback((percentage: number) => {
-    const newTime = (percentage / 100) * audioPlayer.state.duration;
-    audioPlayer.controls.seekTo(newTime);
-    progressTimer.setTime(newTime);
-  }, [audioPlayer, progressTimer]);
-
-  // Управление громкостью
-  const changeVolume = useCallback((volume: number) => {
-    audioPlayer.controls.setVolume(volume);
-  }, [audioPlayer]);
-
-  const toggleMute = useCallback(() => {
-    audioPlayer.controls.toggleMute();
-  }, [audioPlayer]);
-
-  // Закрытие плеера
-  const closePlayer = useCallback(() => {
-    audioPlayer.controls.stop();
-    progressTimer.stop();
-    setIsPlayerVisible(false);
-    setIsLoadingTrack(false);
-    playlistManager.clear();
-    console.log('🔴 Плеер закрыт');
-  }, [audioPlayer, progressTimer, playlistManager]);
+  };
 
   // Обновление плейлиста
   const updatePlaylist = useCallback((nfts: NFT[]) => {
@@ -336,9 +750,56 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
       // Очищаем ресурсы только при размонтировании компонента
       musicCache.clear();
       listenTracker.clear();
-      musicApiKey.clearCache();
-      musicGenerationService.cleanup();
-      listenRecordService.cleanup();
+    };
+  }, []);
+
+  // Обработка событий аудио элемента
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const handleEnded = () => {
+      console.log('🔄 Аудио трек завершен, переключаемся на следующий');
+      playNextTrack();
+    };
+
+    const handleError = (e: Event) => {
+      console.error('❌ Ошибка воспроизведения аудио:', e);
+      setIsPlaying(false);
+      setIsLoadingTrack(false);
+      // Пробуем переключиться на следующий трек при ошибке
+      if (playlist.length > 1) {
+        setTimeout(() => playNextTrack(), 1000);
+      }
+    };
+
+    const handleLoadStart = () => {
+      console.log('⏳ Начало загрузки аудио');
+    };
+
+    const handleCanPlay = () => {
+      console.log('✅ Аудио готово к воспроизведению');
+    };
+
+    const handleLoadedMetadata = () => {
+      console.log('📊 Метаданные аудио загружены, длительность:', audio.duration);
+      if (audio.duration && !isNaN(audio.duration)) {
+        setDuration(audio.duration);
+      }
+    };
+
+    audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('error', handleError);
+    audio.addEventListener('loadstart', handleLoadStart);
+    audio.addEventListener('canplay', handleCanPlay);
+    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+
+    return () => {
+      audio.removeEventListener('ended', handleEnded);
+      audio.removeEventListener('error', handleError);
+      audio.removeEventListener('loadstart', handleLoadStart);
+      audio.removeEventListener('canplay', handleCanPlay);
+      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
     };
   }, []); // Пустой массив зависимостей!
 
@@ -348,15 +809,13 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
     currentNft: playlistManager.getCurrentTrack(),
     isPlaying: audioPlayer.state.isPlaying,
     isPlayerVisible,
-    progress: audioPlayer.state.progress,
-    duration: audioPlayer.state.duration,
-    currentTime: audioPlayer.state.currentTime,
-    volume: audioPlayer.state.volume,
-    isMuted: audioPlayer.state.isMuted,
-    playlist: playlistManager.playlist,
+    progress,
+    duration,
+    currentTime,
+    volume,
+    isMuted,
+    playlist,
     isLoadingTrack,
-
-    // Методы
     updatePlaylist,
     playNft,
     togglePlay,

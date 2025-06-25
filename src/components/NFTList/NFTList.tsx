@@ -1,4 +1,3 @@
-// src/components/NFTList/NFTList.tsx
 import { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { usePlayer } from '../../contexts/PlayerContext';
@@ -9,7 +8,7 @@ import type { NFTListProps } from '../../types/nft';
 import { nftListStyles } from './NFTList.styles';
 
 export function NFTList({ nfts, loading, error, searchQuery, sortBy }: NFTListProps) {
-  const { updatePlaylist, currentNft, isPlaying, isLoadingTrack } = usePlayer();
+  const { updatePlaylist, currentNft, isPlaying } = usePlayer();
   const { filteredNfts } = useNFTSearch(nfts, searchQuery, sortBy);
   const { generatingMusic, handleNftClick } = useMusicGeneration();
 
@@ -114,7 +113,7 @@ export function NFTList({ nfts, loading, error, searchQuery, sortBy }: NFTListPr
                 )}
 
                 {/* Анимация воспроизведения - показываем только когда реально играет */}
-                {isCurrentPlaying && !isGenerating && !isLoadingTrack && isPlaying && (
+                {isCurrentPlaying && !isGenerating && isPlaying && (
                   <div style={nftListStyles.playingOverlay}>
                     <PlayingAnimation 
                       isPlaying={true} 
@@ -131,9 +130,8 @@ export function NFTList({ nfts, loading, error, searchQuery, sortBy }: NFTListPr
                 <div style={isCurrentPlaying ? nftListStyles.subtitlePlaying : nftListStyles.subtitle}>
                   {nft.collection?.name || 'Без коллекции'}
                   {isGenerating && ' • Генерация музыки...'}
-                  {isCurrentPlaying && !isGenerating && isLoadingTrack && ' • Загрузка...'}
-                  {isCurrentPlaying && !isGenerating && !isLoadingTrack && isPlaying && ' • Воспроизводится'}
-                  {isCurrentPlaying && !isGenerating && !isLoadingTrack && !isPlaying && ' • На паузе'}                
+                  {isCurrentPlaying && !isGenerating && isPlaying && ' • Воспроизводится'}
+                  {isCurrentPlaying && !isGenerating && !isPlaying && ' • На паузе'}
                 </div>
               </div>
             </motion.div>
