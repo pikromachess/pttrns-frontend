@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useParams, useLocation } from 'react-router-dom';
+import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { backendApi } from '../../backend-api';
 import { CollectionHeader } from './CollectionHeader';
 import { NFTStatItem } from './NFTStatItem';
@@ -10,6 +10,7 @@ import { NavBar } from '../NavBar/NavBar';
 import { UpperBar } from '../UpperBar/UpperBar';
 import '../../App.css';
 import type { Collection, NFTWithListens } from '../../types/nft';
+import { useCustomBackButton } from '../../hooks/useCustomBackButton';
 
 export default function CollectionPage() {
   const { address } = useParams<{ address: string }>();  
@@ -23,6 +24,13 @@ export default function CollectionPage() {
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
   const tonConnectButtonRef = useRef<HTMLDivElement | null>(null);
   const upperBarRef = useRef<HTMLDivElement | null>(null); 
+  const navigate = useNavigate();
+
+  useCustomBackButton({
+    onBack: () => {      
+      navigate('/'); // Всегда возвращаемся на главную
+    }
+  });
 
   const formatListens = (count: number): string => {
     if (count >= 1000000) {

@@ -12,6 +12,7 @@ import { MiniPlayer } from './components/MiniPlayer/MiniPlayer.tsx';
 import { NFTProvider } from './contexts/NFTContext';
 import { BackendTokenContext } from './BackendTokenContext';
 import { ProvideBackendAuth } from './ProvideBackendAuth';
+import { TelegramBackButton } from './components/TelegramBackButton/TelegramBackButton';
 
 // Компонент для анимированных роутов
 function AnimatedRoutes() {
@@ -59,6 +60,11 @@ function Root() {
       tg.ready();
       tg.MainButton.hide();
       
+      // Инициализируем BackButton
+      if (tg.BackButton) {
+        tg.BackButton.hide(); // Изначально скрыта
+      }
+      
       // Проверяем поддержку функций перед их вызовом
       if (tg.disableVerticalSwipes) {
         tg.disableVerticalSwipes();
@@ -96,6 +102,10 @@ function Root() {
         if (tg.offEvent) {
           tg.offEvent('viewportChanged', updateSafeArea);
         }
+        // Очищаем BackButton при размонтировании
+        if (tg.BackButton) {
+          tg.BackButton.hide();
+        }
       };
     } else {
       document.documentElement.style.setProperty('--safe-area-top', 'env(safe-area-inset-top, 0px)');
@@ -113,8 +123,10 @@ function Root() {
           <NFTProvider>
             <BrowserRouter>
               <NavBarProvider>
-                <AnimatedRoutes />
-                <MiniPlayer />
+                <TelegramBackButton>
+                  <AnimatedRoutes />
+                  <MiniPlayer />
+                </TelegramBackButton>
               </NavBarProvider>
             </BrowserRouter>
           </NFTProvider>
