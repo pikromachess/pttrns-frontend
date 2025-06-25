@@ -39,6 +39,7 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
   const [previousVolume, setPreviousVolume] = useState(0.8);
   const [playlist, setPlaylist] = useState<NFT[]>([]);
   const [currentTrackIndex, setCurrentTrackIndex] = useState(-1);
+  const [isLoadingTrack, setIsLoadingTrack] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const { token } = useContext(BackendTokenContext);
@@ -176,7 +177,7 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
     }
   }, [token, playlist, getNftCacheKey]);
 
-  // Основная функция воспроизведения с улучшенной логикой коллекций
+  // Основная функция воспроизведения с правильной логикой загрузки
   const playNft = async (nft: NFT, nfts: NFT[] = []) => {
     console.log('🎯 Запуск воспроизведения NFT:', {
       name: nft.metadata?.name,
@@ -228,7 +229,11 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
     setCurrentTrackIndex(startIndex);
     setCurrentNft(enrichedNft); // ВАЖНО: Используем обогащенный NFT
     setIsPlayerVisible(true);
-    setIsPlaying(true);
+    
+    // Устанавливаем состояние загрузки
+    setIsLoadingTrack(true);
+    setIsPlaying(false); // ВАЖНО: ставим на паузу пока не загрузился трек
+    
     setProgress(0);
     setCurrentTime(0);
     setDuration(180);
@@ -249,6 +254,8 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
           musicCache.set(cacheKey, audioUrl);
         } catch (error) {
           console.error('❌ Ошибка генерации музыки:', error);
+          setIsLoadingTrack(false);
+          setIsPlaying(false);
           return;
         }
       }
@@ -275,18 +282,40 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
           }
         }, { once: true });
 
+        // Добавляем обработчик успешного начала воспроизведения
+        audioRef.current.addEventListener('playing', () => {
+          console.log('▶️ Основной трек начал воспроизводиться');
+          setIsLoadingTrack(false);
+          setIsPlaying(true);
+          startProgressTimer();
+        }, { once: true });
+        
+        // Добавляем обработчик ошибки загрузки
+        audioRef.current.addEventListener('error', () => {
+          console.log('❌ Ошибка загрузки основного трека');
+          setIsLoadingTrack(false);
+          setIsPlaying(false);
+        }, { once: true });
+
         const playPromise = audioRef.current.play();
         if (playPromise !== undefined) {
           await playPromise;
+          // Если play() успешен, но событие 'playing' может еще не сработать
+          setTimeout(() => {
+            if (audioRef.current && !audioRef.current.paused) {
+              setIsLoadingTrack(false);
+              setIsPlaying(true);
+              startProgressTimer();
+            }
+          }, 100);
         }
       } catch (error) {
         console.error('❌ Ошибка воспроизведения:', error);
+        setIsLoadingTrack(false);
+        setIsPlaying(false);
       }
     }
 
-    // Запускаем таймер прогресса
-    startProgressTimer();
-    
     // Предзагружаем следующий трек
     if (orderedPlaylist.length > 1) {
       preloadNextTrack(startIndex);
@@ -440,6 +469,7 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
     setIsPlaying(false);
     setCurrentNft(null);
     setCurrentTrackIndex(-1);
+    setIsLoadingTrack(false);
     listenRecordedRef.current = false;
     if (intervalRef.current) clearInterval(intervalRef.current);
     if (audioRef.current) {
@@ -477,6 +507,10 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
     
     // КРИТИЧЕСКИ ВАЖНО: Сбрасываем флаг записи прослушивания для НОВОГО трека
     listenRecordedRef.current = false;
+    
+    // Устанавливаем состояние загрузки
+    setIsLoadingTrack(true);
+    setIsPlaying(false); // ВАЖНО: ставим на паузу пока не загрузился трек
     
     setCurrentTrackIndex(nextIndex);
     setCurrentNft(nextNft);
@@ -516,12 +550,34 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
           }
         }, { once: true });
         
-        if (isPlaying) {
-          const playPromise = audioRef.current.play();
-          if (playPromise !== undefined) {
-            await playPromise;
-          }
+        // Добавляем обработчик успешного начала воспроизведения
+        audioRef.current.addEventListener('playing', () => {
+          console.log('▶️ Трек начал воспроизводиться');
+          setIsLoadingTrack(false);
+          setIsPlaying(true);
           startProgressTimer();
+        }, { once: true });
+        
+        // Добавляем обработчик ошибки загрузки
+        audioRef.current.addEventListener('error', () => {
+          console.log('❌ Ошибка загрузки трека');
+          setIsLoadingTrack(false);
+          setIsPlaying(false);
+        }, { once: true });
+        
+        // Пытаемся начать воспроизведение
+        const playPromise = audioRef.current.play();
+        if (playPromise !== undefined) {
+          await playPromise;
+          // Если play() успешен, но событие 'playing' может еще не сработать
+          // Устанавливаем небольшую задержку для корректной работы
+          setTimeout(() => {
+            if (audioRef.current && !audioRef.current.paused) {
+              setIsLoadingTrack(false);
+              setIsPlaying(true);
+              startProgressTimer();
+            }
+          }, 100);
         }
       }
       
@@ -532,6 +588,9 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
       
     } catch (error) {
       console.error('❌ Ошибка воспроизведения следующего трека:', error);
+      setIsLoadingTrack(false);
+      setIsPlaying(false);
+      
       // Пробуем пропустить проблемный трек
       if (playlist.length > 1) {
         const skipIndex = (nextIndex + 1) % playlist.length;
@@ -581,6 +640,10 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
     // Сбрасываем флаг записи прослушивания для нового трека
     listenRecordedRef.current = false;
     
+    // Устанавливаем состояние загрузки
+    setIsLoadingTrack(true);
+    setIsPlaying(false); // ВАЖНО: ставим на паузу пока не загрузился трек
+    
     setCurrentTrackIndex(prevIndex);
     setCurrentNft(prevNft);
     setProgress(0);
@@ -614,12 +677,33 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
           }
         }, { once: true });
         
-        if (isPlaying) {
-          const playPromise = audioRef.current.play();
-          if (playPromise !== undefined) {
-            await playPromise;
-          }
+        // Добавляем обработчик успешного начала воспроизведения
+        audioRef.current.addEventListener('playing', () => {
+          console.log('▶️ Предыдущий трек начал воспроизводиться');
+          setIsLoadingTrack(false);
+          setIsPlaying(true);
           startProgressTimer();
+        }, { once: true });
+        
+        // Добавляем обработчик ошибки загрузки
+        audioRef.current.addEventListener('error', () => {
+          console.log('❌ Ошибка загрузки предыдущего трека');
+          setIsLoadingTrack(false);
+          setIsPlaying(false);
+        }, { once: true });
+        
+        // Пытаемся начать воспроизведение
+        const playPromise = audioRef.current.play();
+        if (playPromise !== undefined) {
+          await playPromise;
+          // Если play() успешен, но событие 'playing' может еще не сработать
+          setTimeout(() => {
+            if (audioRef.current && !audioRef.current.paused) {
+              setIsLoadingTrack(false);
+              setIsPlaying(true);
+              startProgressTimer();
+            }
+          }, 100);
         }
       }
       
@@ -630,6 +714,9 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
       
     } catch (error) {
       console.error('❌ Ошибка воспроизведения предыдущего трека:', error);
+      setIsLoadingTrack(false);
+      setIsPlaying(false);
+      
       // Пробуем пропустить проблемный трек
       if (playlist.length > 1) {
         const skipIndex = (prevIndex - 1 + playlist.length) % playlist.length;
@@ -675,6 +762,7 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
     const handleError = (e: Event) => {
       console.error('❌ Ошибка воспроизведения аудио:', e);
       setIsPlaying(false);
+      setIsLoadingTrack(false);
       // Пробуем переключиться на следующий трек при ошибке
       if (playlist.length > 1) {
         setTimeout(() => playNextTrack(), 1000);
@@ -721,6 +809,7 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
     volume,
     isMuted,
     playlist,
+    isLoadingTrack,
     updatePlaylist,
     playNft,
     togglePlay,
