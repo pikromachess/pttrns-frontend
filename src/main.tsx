@@ -72,8 +72,7 @@ function Root() {
       }      
       
       if (tg.disableClosingConfirmation) {
-        tg.disableClosingConfirmation();
-        console.log('🔓 Подтверждение закрытия отключено');
+        tg.disableClosingConfirmation();        
       }
 
       const updateSafeArea = () => {

@@ -41,9 +41,7 @@ export default function CollectionPage() {
     return count.toString();
   };  
 
-  const onSortSelect = (sortOption: string) => {
-    console.log('Selected sort option:', sortOption);
-    // Implement sorting logic here if needed
+  const onSortSelect = () => {        
   };
 
   const searchWidth = () => {
@@ -65,16 +63,11 @@ export default function CollectionPage() {
         setLoading(true);
         setError(null);
         
-        console.log('📊 Загружаю статистику NFT для работы:', address);
+        
         
         const response = await backendApi.getCollectionNftsStats(address, 50);
         
-        if (response && response.nfts) {
-          console.log('✅ Загружены данные статистики:', {
-            nfts: response.nfts,
-            totalListens: response.nfts.reduce((sum, nft) => sum + nft.listens, 0)
-          });
-          
+        if (response && response.nfts) {     
           setNfts(response.nfts);
         } else {
           setError('Не удалось загрузить статистику коллекции');

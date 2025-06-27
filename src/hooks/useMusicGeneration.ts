@@ -18,17 +18,9 @@ export function useMusicGeneration() {
     const nftId = selectedNft.address || `${selectedNft.index}`;
     
     // Проверяем, не генерируется ли уже музыка для этого NFT
-    if (generatingMusic === nftId) {
-      console.log('⏳ Музыка уже генерируется для этого NFT');
+    if (generatingMusic === nftId) {      
       return;
-    }
-
-    console.log('🎵 Начинаем генерацию музыки для NFT:', {
-      name: selectedNft.metadata?.name,
-      address: selectedNft.address,
-      collectionAddress: selectedNft.collection?.address,
-      playlistSize: allNfts.length
-    });
+    }    
 
     // Создаем копию выбранного NFT для избежания мутаций
     let nftToPlay = { ...selectedNft };
@@ -41,22 +33,13 @@ export function useMusicGeneration() {
         n.address === nftToPlay.address && n.collection?.address
       );
       if (nftWithCollection) {
-        nftToPlay = { ...nftToPlay, collection: nftWithCollection.collection };
-        console.log('🔧 Дополнили информацию о коллекции из плейлиста:', nftToPlay.collection?.address);
+        nftToPlay = { ...nftToPlay, collection: nftWithCollection.collection };        
       } else {
         console.error('❌ Не удалось найти информацию о коллекции для NFT');
         alert('Ошибка: отсутствует информация о коллекции NFT');
         return;
       }
-    }
-
-    // Логируем финальные данные NFT перед воспроизведением
-    console.log('🎯 Финальные данные NFT для генерации:', {
-      name: nftToPlay.metadata?.name,
-      address: nftToPlay.address,
-      collectionName: nftToPlay.collection?.name,
-      collectionAddress: nftToPlay.collection?.address
-    });
+    }    
     
     try {
       setGeneratingMusic(nftId);
@@ -66,8 +49,7 @@ export function useMusicGeneration() {
         window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
       }
       
-      const audioUrl = await generateMusicWithToken(nftToPlay, token);
-      console.log('🎼 Музыка сгенерирована, начинаем воспроизведение');
+      const audioUrl = await generateMusicWithToken(nftToPlay, token);      
       
       // Убеждаемся, что все NFT в плейлисте имеют правильную информацию о коллекции
       const enrichedPlaylist = allNfts.map(playlistNft => {
@@ -97,16 +79,8 @@ export function useMusicGeneration() {
       } else {
         // Если трек не найден, просто используем весь список
         orderedPlaylist = enrichedPlaylist;
-      }
+      }     
       
-      console.log('📋 Плейлист сформирован:', {
-        selectedTrack: nftToPlay.metadata?.name,
-        selectedIndex,
-        totalTracks: orderedPlaylist.length,
-        firstTrack: orderedPlaylist[0]?.metadata?.name,
-        allTracksHaveCollection: orderedPlaylist.every(n => n.collection?.address),
-        collectionAddress: nftToPlay.collection?.address
-      });
       
       // Запускаем воспроизведение с правильным плейлистом
       await playNft({ ...nftToPlay, audioUrl }, orderedPlaylist);
@@ -119,15 +93,7 @@ export function useMusicGeneration() {
     }
   }, [token, playNft, generatingMusic]);
 
-  const handleNftClick = useCallback((nft: NFT, allNfts: NFT[]) => {
-    console.log('🎯 NFT clicked:', {
-      track: nft.metadata?.name,
-      hasToken: !!token,
-      playlistSize: allNfts.length,
-      hasCollectionInfo: !!nft.collection?.address,
-      collectionAddress: nft.collection?.address
-    });
-    
+  const handleNftClick = useCallback((nft: NFT, allNfts: NFT[]) => {   
     // Убеждаемся, что передаем полный список NFT для формирования плейлиста
     generateMusicForNft(nft, allNfts);
   }, [generateMusicForNft]);

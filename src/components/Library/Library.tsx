@@ -62,8 +62,7 @@ export default function Library() {
       prevWalletRef.current.address !== currentWallet.address ||
       prevWalletRef.current.chain !== currentWallet.chain;
     
-    if (walletChanged) {
-      console.log('Кошелек изменился:', prevWalletRef.current, '->', currentWallet);
+    if (walletChanged) {      
       prevWalletRef.current = currentWallet;
       
       if (currentWallet.address && currentWallet.chain && token) {

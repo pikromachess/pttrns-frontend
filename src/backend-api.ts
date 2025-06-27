@@ -2,7 +2,8 @@ import type {Account, CHAIN, TonProofItemReplySuccess} from "@tonconnect/ui-reac
 import type { NFTResponse, Collection, NFTWithListens, NFTStatsResponse } from "./types/nft";
 
 export class BackendApi {
-    baseUrl = 'https://pttrns-backend-ts.vercel.app';    
+    // baseUrl = 'https://pttrns-backend-ts.vercel.app'; 
+    baseUrl = 'http://localhost:3000';  
 
     async generatePayload(): Promise<string | undefined> {
         try {

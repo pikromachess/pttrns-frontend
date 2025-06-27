@@ -13,8 +13,7 @@ export function NFTList({ nfts, loading, error, searchQuery, sortBy }: NFTListPr
   const { filteredNfts } = useNFTSearch(nfts, searchQuery, sortBy);
   const { generatingMusic, handleNftClick } = useMusicGeneration();
 
-  useEffect(() => {
-    console.log('Обновляем плейлист в плеере:', filteredNfts.length, 'треков');
+  useEffect(() => {    
     updatePlaylist(filteredNfts);
   }, [filteredNfts, updatePlaylist]);
 
@@ -62,8 +61,7 @@ export function NFTList({ nfts, loading, error, searchQuery, sortBy }: NFTListPr
           return (
             <motion.div
               key={uniqueKey}
-              onClick={() => {
-                console.log('Клик по NFT:', nft.metadata?.name, 'Передаем плейлист из', filteredNfts.length, 'треков');
+              onClick={() => {                
                 handleNftClick(nft, filteredNfts);
               }}
               whileTap={{ scale: 0.98 }}

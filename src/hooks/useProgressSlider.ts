@@ -32,9 +32,7 @@ export function useProgressSlider({ onSeek, progress }: UseProgressSliderProps) 
 
   const handleStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault();
-    e.stopPropagation();
-    
-    console.log('Progress slider: start dragging');
+    e.stopPropagation();    
     
     const newProgress = calculateProgress(e);
     setIsDragging(true);
@@ -56,9 +54,7 @@ export function useProgressSlider({ onSeek, progress }: UseProgressSliderProps) 
   }, [isDragging, calculateProgress]);
 
   const handleEnd = useCallback(() => {
-    if (!isDragging || !dragStartRef.current) return;
-    
-    console.log('Progress slider: end dragging, seeking to:', dragProgress);
+    if (!isDragging || !dragStartRef.current) return;       
     
     // Применяем позицию
     onSeek(dragProgress);
@@ -79,8 +75,7 @@ export function useProgressSlider({ onSeek, progress }: UseProgressSliderProps) 
       e.preventDefault();
       e.stopPropagation();
       
-      const newProgress = calculateProgress(e);
-      console.log('Progress slider: track click, seeking to:', newProgress);
+      const newProgress = calculateProgress(e);     
       
       onSeek(newProgress);
       lastValidProgressRef.current = newProgress;

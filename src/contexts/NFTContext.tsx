@@ -39,9 +39,8 @@ export function NFTProvider({ children }: NFTProviderProps): JSX.Element {
 
     const cacheKey = `${walletAddress}-${selectedNetwork}`;
     
-    // Проверяем, есть ли уже активный запрос для этого ключа
-    if (activeRequests.current.has(cacheKey)) {
-      console.log('Запрос уже выполняется для:', cacheKey);
+    
+    if (activeRequests.current.has(cacheKey)) {      
       return;
     }
     
@@ -59,8 +58,7 @@ export function NFTProvider({ children }: NFTProviderProps): JSX.Element {
     setLoading(true);
     setError(null);
     
-    try {
-      console.log('Отправляем запрос NFT для:', walletAddress, selectedNetwork);
+    try {      
       const data = await backendApi.getNFTs(token, walletAddress, selectedNetwork, 100, 0);
       
       if (!data) {

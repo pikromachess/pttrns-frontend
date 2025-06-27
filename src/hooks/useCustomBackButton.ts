@@ -20,8 +20,7 @@ export function useCustomBackButton({
     const tg = window.Telegram.WebApp;
     const backButton = tg.BackButton;
 
-    const handleCustomBack = () => {
-      console.log('🔙 Custom Back Button logic');
+    const handleCustomBack = () => {      
       
       // Тактильная обратная связь
       if (tg.HapticFeedback) {

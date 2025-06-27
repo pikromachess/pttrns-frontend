@@ -39,8 +39,7 @@ function App() {
   const fetchCollections = async (forceRefresh = false) => {
     try {
       // Проверяем кеш только если не принудительное обновление
-      if (!forceRefresh && isCacheValid()) {
-        console.log('📦 Используем закешированные коллекции');
+      if (!forceRefresh && isCacheValid()) {        
         setCollections(collectionsCache!.data);
         setLoading(false);
         setError(null);
@@ -48,9 +47,8 @@ function App() {
       }
 
       setLoading(true);
-      setError(null);
+      setError(null);     
       
-      console.log('🌐 Загружаем коллекции с сервера');
       
       // Получаем данные о коллекциях из API
       const response = await backendApi.getCollections();
@@ -63,8 +61,7 @@ function App() {
           timestamp: Date.now()
         };
         
-        setCollections(collectionsData);
-        console.log('✅ Коллекции успешно загружены и закешированы:', collectionsData.length);
+        setCollections(collectionsData);        
       } else {
         setError('Не удалось загрузить коллекции');
       }
@@ -77,16 +74,14 @@ function App() {
   };
 
   // Функция для принудительного обновления
-  const refreshCollections = () => {
-    console.log('🔄 Принудительное обновление коллекций');
+  const refreshCollections = () => {    
     fetchCollections(true);
   };
 
   useEffect(() => {
     // При первом монтировании проверяем кеш
     if (isInitialLoadRef.current) {
-      isInitialLoadRef.current = false;
-      console.log('🚀 Первый запуск App, проверяем кеш коллекций');
+      isInitialLoadRef.current = false;      
       fetchCollections();
     }
   }, []);
@@ -109,8 +104,7 @@ function App() {
     return count.toString();
   };
 
-  const onSortSelect = (sortOption: string) => {
-    console.log('Selected sort option:', sortOption);
+  const onSortSelect = () => {    
     // Implement sorting logic here if needed
   };
 
