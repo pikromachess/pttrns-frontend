@@ -38,9 +38,8 @@ export function ProgressSlider({
 
   const handleProgressStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault();
-    e.stopPropagation();
+    e.stopPropagation();   
     
-    console.log('Progress drag start');
     setIsDragging(true);
     dragStartRef.current = true;
     
@@ -63,8 +62,7 @@ export function ProgressSlider({
 
   const handleProgressEnd = useCallback(() => {
     if (!isDragging || !dragStartRef.current) return;
-    
-    console.log('Progress drag end, seeking to:', dragProgress);
+       
     
     // Применяем финальную позицию
     onSeek(dragProgress);
@@ -90,8 +88,7 @@ export function ProgressSlider({
       e.preventDefault();
       e.stopPropagation();
       
-      const newProgress = calculateProgress(e);
-      console.log('Track click, seeking to:', newProgress);
+      const newProgress = calculateProgress(e);      
       onSeek(newProgress);
       
       // Добавляем тактильную обратную связь

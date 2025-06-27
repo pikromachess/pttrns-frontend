@@ -19,8 +19,7 @@ export function useTelegramBackButton() {
       backButton.show();
       
       // Обработчик нажатия на кнопку "Назад"
-      const handleBackClick = () => {
-        console.log('🔙 Telegram Back Button clicked');
+      const handleBackClick = () => {      
         
         // Добавляем тактильную обратную связь
         if (tg.HapticFeedback) {
