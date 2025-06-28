@@ -1,5 +1,5 @@
 import { useState, useCallback, useContext } from 'react';
-import { usePlayer, generateMusicWithToken } from '../contexts/PlayerContext';
+import { usePlayer} from '../contexts/PlayerContext';
 import { BackendTokenContext } from '../BackendTokenContext';
 import type { NFT } from '../types/nft';
 
@@ -7,6 +7,11 @@ export function useMusicGeneration() {
   const { playNft } = usePlayer();
   const { token } = useContext(BackendTokenContext);
   const [generatingMusic, setGeneratingMusic] = useState<string | null>(null);
+
+  // Функция для получения ключа кеша NFT (дублируем из PlayerContext)
+  const getNftCacheKey = useCallback((nft: NFT): string => {
+    return nft.address || `index-${nft.index}`;
+  }, []);
 
   const generateMusicForNft = useCallback(async (selectedNft: NFT, allNfts: NFT[]) => {
     if (!token) {
@@ -49,7 +54,8 @@ export function useMusicGeneration() {
         window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
       }
       
-      const audioUrl = await generateMusicWithToken(nftToPlay, token);      
+      // ИСПРАВЛЕНИЕ: Не генерируем audioUrl здесь, позволяем playNft обработать кеш
+      // const audioUrl = await generateMusicWithToken(nftToPlay, token);      
       
       // Убеждаемся, что все NFT в плейлисте имеют правильную информацию о коллекции
       const enrichedPlaylist = allNfts.map(playlistNft => {
@@ -81,9 +87,9 @@ export function useMusicGeneration() {
         orderedPlaylist = enrichedPlaylist;
       }     
       
-      
+      // ИСПРАВЛЕНИЕ: Передаем nftToPlay БЕЗ audioUrl, позволяя playNft обработать кеш
       // Запускаем воспроизведение с правильным плейлистом
-      await playNft({ ...nftToPlay, audioUrl }, orderedPlaylist);
+      await playNft(nftToPlay, orderedPlaylist);
       
     } catch (error) {
       console.error('❌ Ошибка генерации музыки:', error);
@@ -91,7 +97,7 @@ export function useMusicGeneration() {
     } finally {
       setGeneratingMusic(null);
     }
-  }, [token, playNft, generatingMusic]);
+  }, [token, playNft, generatingMusic, getNftCacheKey]);
 
   const handleNftClick = useCallback((nft: NFT, allNfts: NFT[]) => {   
     // Убеждаемся, что передаем полный список NFT для формирования плейлиста

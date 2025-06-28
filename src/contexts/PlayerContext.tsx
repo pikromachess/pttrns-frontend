@@ -208,22 +208,28 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
 
     // Получаем аудио URL для текущего трека
     const cacheKey = getNftCacheKey(enrichedNft);
-    let audioUrl = enrichedNft.audioUrl;
-    
-    // Если аудио нет в NFT, проверяем кеш или генерируем
-    if (!audioUrl) {
-      if (musicCache.has(cacheKey)) {
-        audioUrl = musicCache.get(cacheKey)!;        
-      } else {
-        try {          
-          audioUrl = await generateMusicWithToken(enrichedNft, token!);
-          musicCache.set(cacheKey, audioUrl);
-        } catch (error) {
-          console.error('❌ Ошибка генерации музыки:', error);
-          setIsLoadingTrack(false);
-          setIsPlaying(false);
-          return;
-        }
+    let audioUrl: string;
+
+    // ВАЖНО: Всегда проверяем кеш первым делом, независимо от наличия audioUrl в NFT
+    if (musicCache.has(cacheKey)) {
+      audioUrl = musicCache.get(cacheKey)!;
+      console.log('🎵 Используем кешированную музыку для:', enrichedNft.metadata?.name);
+    } else if (enrichedNft.audioUrl) {
+      // Если есть audioUrl в NFT, но его нет в кеше, добавляем в кеш
+      audioUrl = enrichedNft.audioUrl;
+      musicCache.set(cacheKey, audioUrl);
+      console.log('🎵 Добавляем существующий audioUrl в кеш для:', enrichedNft.metadata?.name);
+    } else {
+      // Генерируем новую музыку только если её нет ни в кеше, ни в NFT
+      try {
+        console.log('🎵 Генерируем новую музыку для:', enrichedNft.metadata?.name);
+        audioUrl = await generateMusicWithToken(enrichedNft, token!);
+        musicCache.set(cacheKey, audioUrl);
+      } catch (error) {
+        console.error('❌ Ошибка генерации музыки:', error);
+        setIsLoadingTrack(false);
+        setIsPlaying(false);
+        return;
       }
     }
 
