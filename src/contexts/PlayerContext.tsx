@@ -46,6 +46,9 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
   const isMountedRef = useRef(true);
   const playNextTrackRef = useRef<(() => Promise<void>) | null>(null);
   const listenRecordedRef = useRef(false);
+  // НОВОЕ: Трекер времени для корректного засчитывания прослушиваний
+  const actualPlaytimeRef = useRef(0); // Фактическое время прослушивания (без перемоток)
+  const lastUpdateTimeRef = useRef(0); // Последнее время обновления для расчета дельты
 
   // Функция для записи прослушивания с улучшенной логикой
   const recordListen = useCallback(async (nft: NFT) => {    
@@ -161,8 +164,10 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
   // Основная функция воспроизведения с правильной логикой загрузки
   const playNft = async (nft: NFT, nfts: NFT[] = []) => {    
     
-    // КРИТИЧЕСКИ ВАЖНО: Сбрасываем флаг записи прослушивания для НОВОГО трека
+    // КРИТИЧЕСКИ ВАЖНО: Сбрасываем все счетчики для НОВОГО трека
     listenRecordedRef.current = false;
+    actualPlaytimeRef.current = 0;
+    lastUpdateTimeRef.current = 0;
     
     // ВАЖНО: Убеждаемся, что у NFT есть правильная информация о коллекции
     let enrichedNft = { ...nft };
@@ -242,6 +247,9 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
         audioRef.current.addEventListener('playing', () => {          
           setIsLoadingTrack(false);
           setIsPlaying(true);
+          // ВАЖНО: Сбрасываем счетчики времени при начале воспроизведения
+          actualPlaytimeRef.current = 0;
+          lastUpdateTimeRef.current = Date.now();
           startProgressTimer();
         }, { once: true });
         
@@ -259,6 +267,8 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
             if (audioRef.current && !audioRef.current.paused) {
               setIsLoadingTrack(false);
               setIsPlaying(true);
+              actualPlaytimeRef.current = 0;
+              lastUpdateTimeRef.current = Date.now();
               startProgressTimer();
             }
           }, 100);
@@ -287,12 +297,16 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
         setCurrentTime(prev => {
           const newTime = prev + 1;
           
+          // НОВОЕ: Обновляем фактическое время прослушивания только если играет
+          if (isPlaying) {
+            actualPlaytimeRef.current += 1;
+          }
+          
           // Условия для записи прослушивания:
-          // 1. Прослушано 30+ секунд ИЛИ
-          // 2. Прослушано 80%+ от общей длительности трека (для коротких треков)
+          // Используем фактическое время прослушивания, а не текущую позицию
           const listenThreshold = Math.min(30, duration * 0.8);
           
-          if (newTime >= listenThreshold && !listenRecordedRef.current && currentNft) {            
+          if (actualPlaytimeRef.current >= listenThreshold && !listenRecordedRef.current && currentNft) {            
             listenRecordedRef.current = true;
             recordListen(currentNft);
           }
@@ -311,12 +325,22 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
       const actualTime = audioRef.current.currentTime;
       const actualDuration = audioRef.current.duration || duration;
       
+      // НОВОЕ: Обновляем фактическое время прослушивания только если музыка реально играет
+      if (!audioRef.current.paused && isPlaying) {
+        const now = Date.now();
+        if (lastUpdateTimeRef.current > 0) {
+          const deltaSeconds = (now - lastUpdateTimeRef.current) / 1000;
+          // Добавляем только реальное время воспроизведения (максимум 1.2 секунды для защиты от больших дельт)
+          actualPlaytimeRef.current += Math.min(deltaSeconds, 1.2);
+        }
+        lastUpdateTimeRef.current = now;
+      }
+      
       // Условия для записи прослушивания:
-      // 1. Прослушано 30+ секунд ИЛИ
-      // 2. Прослушано 80%+ от общей длительности трека (для коротких треков)
+      // Используем фактическое время прослушивания, а не текущую позицию в треке
       const listenThreshold = Math.min(30, actualDuration * 0.8);
       
-      if (actualTime >= listenThreshold && !listenRecordedRef.current && currentNft) {       
+      if (actualPlaytimeRef.current >= listenThreshold && !listenRecordedRef.current && currentNft) {       
         
         // ВАЖНО: Создаем копию currentNft на момент записи для избежания race conditions
         const nftToRecord = { ...currentNft };
@@ -329,7 +353,7 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
         
         
         // Если трек завершен, но прослушивание еще не записано (очень короткий трек)
-        if (!listenRecordedRef.current && currentNft && actualTime >= actualDuration * 0.5) {         
+        if (!listenRecordedRef.current && currentNft && actualPlaytimeRef.current >= actualDuration * 0.5) {         
           const nftToRecord = { ...currentNft };
           listenRecordedRef.current = true;
           recordListen(nftToRecord);
@@ -350,9 +374,11 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
         }
       }
     }, 1000);
-  }, [duration, currentNft, recordListen]);
+  }, [duration, currentNft, recordListen, isPlaying]);
 
   const togglePlay = useCallback(() => {
+    const now = Date.now();
+    
     if (isPlaying) {
       setIsPlaying(false);
       if (audioRef.current) {
@@ -361,6 +387,8 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
       }
+      // НОВОЕ: При паузе обновляем lastUpdateTimeRef
+      lastUpdateTimeRef.current = 0;
     } else {
       setIsPlaying(true);
       if (audioRef.current) {
@@ -369,12 +397,18 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
           setIsPlaying(false);
         });
       }
+      // НОВОЕ: При возобновлении устанавливаем текущее время
+      lastUpdateTimeRef.current = now;
       startProgressTimer();
     }
   }, [isPlaying, startProgressTimer]);
 
   const seekTo = useCallback((percentage: number) => {
     const newTime = (percentage / 100) * duration;   
+    
+    // ВАЖНО: При перемотке НЕ обновляем actualPlaytimeRef!
+    // Фактическое время прослушивания должно учитывать только реальное воспроизведение
+    
     // Обновляем состояние
     setCurrentTime(newTime);
     setProgress(percentage);
@@ -383,6 +417,9 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
     if (audioRef.current) {
       audioRef.current.currentTime = newTime;
     }
+    
+    // Сбрасываем lastUpdateTimeRef для корректного подсчета времени после перемотки
+    lastUpdateTimeRef.current = Date.now();
     
     // Перезапускаем таймер прогресса, если музыка играет
     if (isPlaying) {
@@ -403,7 +440,10 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
     setCurrentNft(null);
     setCurrentTrackIndex(-1);
     setIsLoadingTrack(false);
+    // НОВОЕ: Сбрасываем счетчики времени
     listenRecordedRef.current = false;
+    actualPlaytimeRef.current = 0;
+    lastUpdateTimeRef.current = 0;
     if (intervalRef.current) clearInterval(intervalRef.current);
     if (audioRef.current) {
       audioRef.current.pause();
@@ -430,8 +470,10 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
 
     if (!isMountedRef.current) return;
     
-    // КРИТИЧЕСКИ ВАЖНО: Сбрасываем флаг записи прослушивания для НОВОГО трека
+    // КРИТИЧЕСКИ ВАЖНО: Сбрасываем все счетчики для НОВОГО трека
     listenRecordedRef.current = false;
+    actualPlaytimeRef.current = 0;
+    lastUpdateTimeRef.current = 0;
     
     // Устанавливаем состояние загрузки
     setIsLoadingTrack(true);
@@ -473,6 +515,8 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
         audioRef.current.addEventListener('playing', () => {          
           setIsLoadingTrack(false);
           setIsPlaying(true);
+          actualPlaytimeRef.current = 0;
+          lastUpdateTimeRef.current = Date.now();
           startProgressTimer();
         }, { once: true });
         
@@ -492,6 +536,8 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
             if (audioRef.current && !audioRef.current.paused) {
               setIsLoadingTrack(false);
               setIsPlaying(true);
+              actualPlaytimeRef.current = 0;
+              lastUpdateTimeRef.current = Date.now();
               startProgressTimer();
             }
           }, 100);
@@ -544,8 +590,10 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
 
     if (!isMountedRef.current) return;
     
-    // Сбрасываем флаг записи прослушивания для нового трека
+    // Сбрасываем все счетчики для нового трека
     listenRecordedRef.current = false;
+    actualPlaytimeRef.current = 0;
+    lastUpdateTimeRef.current = 0;
     
     // Устанавливаем состояние загрузки
     setIsLoadingTrack(true);
@@ -586,6 +634,8 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
         audioRef.current.addEventListener('playing', () => {         
           setIsLoadingTrack(false);
           setIsPlaying(true);
+          actualPlaytimeRef.current = 0;
+          lastUpdateTimeRef.current = Date.now();
           startProgressTimer();
         }, { once: true });
         
@@ -604,6 +654,8 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
             if (audioRef.current && !audioRef.current.paused) {
               setIsLoadingTrack(false);
               setIsPlaying(true);
+              actualPlaytimeRef.current = 0;
+              lastUpdateTimeRef.current = Date.now();
               startProgressTimer();
             }
           }, 100);

@@ -20,7 +20,6 @@ export function ProgressSlider({
   const [isDragging, setIsDragging] = useState(false);
   const [dragProgress, setDragProgress] = useState(0);
   const progressRef = useRef<HTMLDivElement>(null);
-  const dragStartRef = useRef(false);
 
   // Используем внутренний прогресс во время перетаскивания
   const displayProgress = isDragging ? dragProgress : progress;
@@ -36,12 +35,11 @@ export function ProgressSlider({
     return percentage;
   }, []);
 
-  const handleProgressStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+  const handleStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault();
     e.stopPropagation();   
     
     setIsDragging(true);
-    dragStartRef.current = true;
     
     const newProgress = calculateProgress(e);
     setDragProgress(newProgress);
@@ -52,23 +50,21 @@ export function ProgressSlider({
     }
   }, [calculateProgress]);
 
-  const handleProgressMove = useCallback((e: MouseEvent | TouchEvent) => {
-    if (!isDragging || !dragStartRef.current) return;
+  const handleMove = useCallback((e: MouseEvent | TouchEvent) => {
+    if (!isDragging) return;
     
     e.preventDefault();
     const newProgress = calculateProgress(e);
     setDragProgress(newProgress);
   }, [isDragging, calculateProgress]);
 
-  const handleProgressEnd = useCallback(() => {
-    if (!isDragging || !dragStartRef.current) return;
+  const handleEnd = useCallback(() => {
+    if (!isDragging) return;
        
-    
     // Применяем финальную позицию
     onSeek(dragProgress);
     
     setIsDragging(false);
-    dragStartRef.current = false;
     
     // Добавляем тактильную обратную связь
     if (window.Telegram?.WebApp?.HapticFeedback) {
@@ -76,10 +72,10 @@ export function ProgressSlider({
     }
   }, [isDragging, dragProgress, onSeek]);
 
-  // Обработчики для кнопки перемотки
+  // Обработчик для ручки (кнопки перемотки)
   const handleKnobStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
-    handleProgressStart(e);
-  }, [handleProgressStart]);
+    handleStart(e);
+  }, [handleStart]);
 
   // Обработчик клика по полосе прогресса
   const handleTrackClick = useCallback((e: React.MouseEvent) => {
@@ -103,11 +99,11 @@ export function ProgressSlider({
     if (!isDragging) return;
 
     const handleGlobalMove = (e: MouseEvent | TouchEvent) => {
-      handleProgressMove(e);
+      handleMove(e);
     };
 
     const handleGlobalEnd = () => {
-      handleProgressEnd();
+      handleEnd();
     };
 
     // Добавляем обработчики для мыши и касаний
@@ -124,7 +120,7 @@ export function ProgressSlider({
       document.removeEventListener('touchend', handleGlobalEnd);
       document.removeEventListener('touchcancel', handleGlobalEnd);
     };
-  }, [isDragging, handleProgressMove, handleProgressEnd]);
+  }, [isDragging, handleMove, handleEnd]);
 
   // Предотвращаем скролл страницы во время перетаскивания
   useEffect(() => {
@@ -146,7 +142,6 @@ export function ProgressSlider({
     <div style={{ width: '100%', marginBottom: '20px' }}>
       <div
         ref={progressRef}
-        data-progress="true"
         onClick={handleTrackClick}
         style={{
           height: '6px',
