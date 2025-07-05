@@ -312,9 +312,17 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
           // Используем фактическое время прослушивания, а не текущую позицию
           const listenThreshold = Math.min(30, duration * 0.8);
           
-          if (actualPlaytimeRef.current >= listenThreshold && !listenRecordedRef.current && currentNft) {            
+          if (actualPlaytimeRef.current >= listenThreshold && !listenRecordedRef.current && currentNft) {
+            const nftToRecord = { ...currentNft };
             listenRecordedRef.current = true;
-            recordListen(currentNft);
+            
+            // Используем сессионную запись если есть sessionId
+            if (nftToRecord.sessionId) {
+              recordListenWithSession(nftToRecord, nftToRecord.sessionId);
+            } else {
+              // Fallback на старый метод
+              recordListen(nftToRecord);
+            }
           }
           
           if (newTime >= duration - 1) {            
@@ -790,6 +798,98 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
     </PlayerContext.Provider>
   );
 }
+
+const recordListenWithSession = useCallback(async (nft: NFT, sessionId: string) => {
+  if (!nft.address || !nft.collection?.address) {
+    console.warn('❌ Недостаточно данных для записи прослушивания:', {
+      hasAddress: !!nft.address,
+      hasCollectionAddress: !!nft.collection?.address
+    });
+    return;
+  }
+
+  const now = Date.now();
+  const lastRecorded = listenTracker.get(nft.address);
+  
+  // Проверяем, что с последней записи прошло минимум 30 секунд
+  if (lastRecorded && (now - lastRecorded) < 30000) {
+    return;
+  }
+
+  try {
+    listenTracker.set(nft.address, now);
+    
+    const response = await fetch('/api/session-listens', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${sessionId}`
+      },
+      body: JSON.stringify({
+        nftAddress: nft.address,
+        timestamp: now
+      })
+    });
+
+    if (!response.ok) {
+      listenTracker.delete(nft.address);
+      
+      if (response.status === 401) {
+        console.error('❌ Сессия истекла при записи прослушивания');
+      } else if (response.status === 429) {
+        console.warn('⚠️ Превышен лимит запросов на прослушивания');
+      } else {
+        console.error('❌ Ошибка при записи прослушивания:', response.status);
+      }
+    } else {
+      const result = await response.json();
+      console.log('✅ Прослушивание записано:', result);
+    }
+  } catch (error) {
+    console.error('❌ Ошибка при записи прослушивания:', error);
+    listenTracker.delete(nft.address);
+  }
+}, []);
+
+// Обновленная функция для генерации музыки с сессией
+export const generateMusicWithSession = async (nft: NFT, sessionId: string, musicServerUrl: string): Promise<string> => {
+  try {
+    console.log('🎵 Генерация музыки через сессию...');
+    
+    const response = await fetch(`${musicServerUrl}/generate-music-stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${sessionId}`,
+      },
+      body: JSON.stringify({
+        metadata: nft.metadata,
+        index: nft.index,
+        address: nft.address
+      })
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Сессия истекла');
+      } else if (response.status === 403) {
+        throw new Error('Нет доступа к генерации музыки');
+      } else if (response.status === 429) {
+        throw new Error('Превышен лимит запросов');
+      } else if (response.status === 503) {
+        throw new Error('Сервис генерации музыки временно недоступен');
+      }
+      throw new Error(`Ошибка сервера: ${response.status}`);
+    }
+
+    const audioBlob = await response.blob();
+    console.log('✅ Музыка сгенерирована успешно');
+    return URL.createObjectURL(audioBlob);
+  } catch (error) {
+    console.error('❌ Ошибка генерации музыки:', error);
+    throw error;
+  }
+};
 
 export const usePlayer = (): PlayerContextType => {
   const context = useContext(PlayerContext);

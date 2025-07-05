@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
-    "@tonconnect/ui-react": "^2.1.0",
+    "@tonconnect/ui-react": "^2.2.0",
     "@types/node": "^24.0.3",
     "framer-motion": "^12.18.1",
     "lodash": "^4.17.21",

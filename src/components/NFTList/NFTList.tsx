@@ -1,4 +1,3 @@
-// src/components/NFTList/NFTList.tsx
 import { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { usePlayer } from '../../contexts/PlayerContext';
@@ -11,7 +10,7 @@ import { nftListStyles } from './NFTList.styles';
 export function NFTList({ nfts, loading, error, searchQuery, sortBy }: NFTListProps) {
   const { updatePlaylist, currentNft, isPlaying, isLoadingTrack } = usePlayer();
   const { filteredNfts } = useNFTSearch(nfts, searchQuery, sortBy);
-  const { generatingMusic, handleNftClick } = useMusicGeneration();
+  const { generatingMusic, handleNftClick, isCreatingSession } = useMusicGeneration();
 
   useEffect(() => {    
     updatePlaylist(filteredNfts);
@@ -56,6 +55,7 @@ export function NFTList({ nfts, loading, error, searchQuery, sortBy }: NFTListPr
           const uniqueKey = `${nft.address || 'no-address'}-${nft.index || index}-${nft.collection?.address || 'no-collection'}`;
           const nftId = nft.address || `${nft.index}`;
           const isGenerating = generatingMusic === nftId;
+          const isSessionCreation = generatingMusic === 'session-creation' || isCreatingSession;
           const isCurrentPlaying = isCurrentNft(nft);
           
           return (
@@ -67,18 +67,18 @@ export function NFTList({ nfts, loading, error, searchQuery, sortBy }: NFTListPr
               whileTap={{ scale: 0.98 }}
               style={{
                 ...nftListStyles.nftItem,
-                backgroundColor: isCurrentPlaying ? '#1a1a1a' : (isGenerating ? '#1a1a1a' : '#000'),
-                cursor: isGenerating ? 'wait' : 'pointer',
-                opacity: isGenerating ? 0.7 : 1,
+                backgroundColor: isCurrentPlaying ? '#1a1a1a' : (isGenerating || isSessionCreation ? '#1a1a1a' : '#000'),
+                cursor: (isGenerating || isSessionCreation) ? 'wait' : 'pointer',
+                opacity: (isGenerating || isSessionCreation) ? 0.7 : 1,
                 border: isCurrentPlaying ? '1px solid #2AABEE' : 'none',
               }}
               onMouseEnter={(e) => {
-                if (!isGenerating && !isCurrentPlaying) {
+                if (!isGenerating && !isCurrentPlaying && !isSessionCreation) {
                   e.currentTarget.style.backgroundColor = '#1c1c1c';
                 }
               }}
               onMouseLeave={(e) => {
-                if (!isGenerating && !isCurrentPlaying) {
+                if (!isGenerating && !isCurrentPlaying && !isSessionCreation) {
                   e.currentTarget.style.backgroundColor = '#000';
                 }
               }}
@@ -104,15 +104,29 @@ export function NFTList({ nfts, loading, error, searchQuery, sortBy }: NFTListPr
                   </div>
                 )}
                 
-                {/* Индикатор загрузки */}
-                {isGenerating && (
+                {/* Индикатор создания сессии */}
+                {isSessionCreation && (
+                  <div style={nftListStyles.loadingOverlay}>
+                    <div style={{
+                      width: '16px',
+                      height: '16px',
+                      border: '2px solid #2AABEE',
+                      borderTop: '2px solid transparent',
+                      borderRadius: '50%',
+                      animation: 'spin 1s linear infinite'
+                    }} />
+                  </div>
+                )}
+
+                {/* Индикатор загрузки конкретного NFT */}
+                {isGenerating && !isSessionCreation && (
                   <div style={nftListStyles.loadingOverlay}>
                     <div style={nftListStyles.spinner} />
                   </div>
                 )}
 
                 {/* Анимация воспроизведения - показываем только когда реально играет */}
-                {isCurrentPlaying && !isGenerating && !isLoadingTrack && isPlaying && (
+                {isCurrentPlaying && !isGenerating && !isLoadingTrack && isPlaying && !isSessionCreation && (
                   <div style={nftListStyles.playingOverlay}>
                     <PlayingAnimation 
                       isPlaying={true} 
@@ -128,10 +142,11 @@ export function NFTList({ nfts, loading, error, searchQuery, sortBy }: NFTListPr
                 </div>
                 <div style={isCurrentPlaying ? nftListStyles.subtitlePlaying : nftListStyles.subtitle}>
                   {nft.collection?.name || 'Без коллекции'}
-                  {isGenerating && ' • Генерация музыки...'}
-                  {isCurrentPlaying && !isGenerating && isLoadingTrack && ' • Загрузка...'}
-                  {isCurrentPlaying && !isGenerating && !isLoadingTrack && isPlaying && ' • Воспроизводится'}
-                  {isCurrentPlaying && !isGenerating && !isLoadingTrack && !isPlaying && ' • На паузе'}                
+                  {isSessionCreation && ' • Создание сессии...'}
+                  {isGenerating && !isSessionCreation && ' • Генерация музыки...'}
+                  {isCurrentPlaying && !isGenerating && isLoadingTrack && !isSessionCreation && ' • Загрузка...'}
+                  {isCurrentPlaying && !isGenerating && !isLoadingTrack && isPlaying && !isSessionCreation && ' • Воспроизводится'}
+                  {isCurrentPlaying && !isGenerating && !isLoadingTrack && !isPlaying && !isSessionCreation && ' • На паузе'}                
                 </div>
               </div>
             </motion.div>

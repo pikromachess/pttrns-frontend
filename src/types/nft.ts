@@ -18,6 +18,8 @@ export interface NFT {
   };  
   trust?: string; 
   audioUrl?: string; 
+  sessionId?: string;
+  musicServerUrl?: string;
 }
 
 export interface NFTListProps {
