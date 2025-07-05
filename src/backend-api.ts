@@ -1,14 +1,15 @@
 import type {Account, CHAIN, TonProofItemReplySuccess} from "@tonconnect/ui-react";
 import type { NFTResponse, Collection, NFTWithListens, NFTStatsResponse } from "./types/nft";
 
+
+export const baseUrl = 'https://pttrns-backend-ts.vercel.app'; 
+// export const baseUrl = 'http://localhost:3000'; 
+
 export class BackendApi {
-    baseUrl = 'https://pttrns-backend-ts.vercel.app'; 
-    // baseUrl = 'http://localhost:3000'; 
-    
 
     async generatePayload(): Promise<string | undefined> {
         try {
-            const response = await (await fetch(`${this.baseUrl}/ton-proof/generatePayload`, {
+            const response = await (await fetch(`${baseUrl}/ton-proof/generatePayload`, {
                 method: 'POST'
             })).json();
             return response.payload;
@@ -28,7 +29,7 @@ export class BackendApi {
                     state_init: account.walletStateInit
                 }
             }
-            const response = await (await fetch(`${this.baseUrl}/ton-proof/checkProof`, {
+            const response = await (await fetch(`${baseUrl}/ton-proof/checkProof`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -44,7 +45,7 @@ export class BackendApi {
 
     async getAccountInfo(authToken: string, network: CHAIN) {
         try {
-            const response = await (await fetch(`${this.baseUrl}/dapp/getAccountInfo?network=${network}`, {
+            const response = await (await fetch(`${baseUrl}/dapp/getAccountInfo?network=${network}`, {
                 headers: {
                     'Authorization': `Bearer ${authToken}`
                 }
@@ -64,7 +65,7 @@ export class BackendApi {
                 limit: limit.toString(),
                 offset: offset.toString()
             });
-            const response = await fetch(`${this.baseUrl}/dapp/getNFTs?${params}`, {
+            const response = await fetch(`${baseUrl}/dapp/getNFTs?${params}`, {
                 headers: {
                     'Authorization': `Bearer ${authToken}`,
                     'Accept': 'application/json',
@@ -83,7 +84,7 @@ export class BackendApi {
 
     async generateMusicApiKey(authToken: string): Promise<{apiKey: string, expiresAt: string, musicServerUrl: string} | undefined> {
         try {
-            const response = await fetch(`${this.baseUrl}/dapp/generateMusicApiKey`, {
+            const response = await fetch(`${baseUrl}/dapp/generateMusicApiKey`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${authToken}`,
@@ -102,7 +103,7 @@ export class BackendApi {
 
     async getCollections(): Promise<{collections: Collection[]} | undefined> {
         try {
-            const response = await fetch(`${this.baseUrl}/api/collections`, {
+            const response = await fetch(`${baseUrl}/api/collections`, {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',
@@ -121,7 +122,7 @@ export class BackendApi {
 
     async getTopNftsInCollection(collectionAddress: string, limit: number = 7): Promise<{nfts: NFTWithListens[]} | undefined> {
         try {
-            const response = await fetch(`${this.baseUrl}/api/collections/${collectionAddress}/top-nfts?limit=${limit}`, {
+            const response = await fetch(`${baseUrl}/api/collections/${collectionAddress}/top-nfts?limit=${limit}`, {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',
@@ -144,7 +145,7 @@ export class BackendApi {
                 limit: limit.toString(),
                 offset: offset.toString()
             });
-            const response = await fetch(`${this.baseUrl}/api/collections/${collectionAddress}/nfts-stats?${params}`, {
+            const response = await fetch(`${baseUrl}/api/collections/${collectionAddress}/nfts-stats?${params}`, {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',
@@ -163,7 +164,7 @@ export class BackendApi {
 
     async recordListen(nftAddress: string, collectionAddress: string): Promise<boolean> {
         try {
-            const response = await fetch(`${this.baseUrl}/api/listens`, {
+            const response = await fetch(`${baseUrl}/api/listens`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -182,7 +183,7 @@ export class BackendApi {
 
     async getStats(): Promise<{totalNftsListened: number, totalListens: number, totalCollections: number} | undefined> {
         try {
-            const response = await fetch(`${this.baseUrl}/api/stats`, {
+            const response = await fetch(`${baseUrl}/api/stats`, {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',
@@ -201,7 +202,7 @@ export class BackendApi {
 
     async getSyncStatus(): Promise<any | undefined> {
         try {
-            const response = await fetch(`${this.baseUrl}/api/sync-status`, {
+            const response = await fetch(`${baseUrl}/api/sync-status`, {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',

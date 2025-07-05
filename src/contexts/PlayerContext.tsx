@@ -1,3 +1,4 @@
+
 import { 
   createContext, 
   useContext, 
@@ -27,6 +28,58 @@ const musicCache = new Map<string, string>();
 // Трекер прослушиваний для избежания дублирования - используем Set с временными метками
 const listenTracker = new Map<string, number>();
 
+// Функция для записи прослушивания с сессией (вынесена наружу)
+const recordListenWithSession = async (nft: NFT, sessionId: string) => {
+  if (!nft.address || !nft.collection?.address) {
+    console.warn('❌ Недостаточно данных для записи прослушивания:', {
+      hasAddress: !!nft.address,
+      hasCollectionAddress: !!nft.collection?.address
+    });
+    return;
+  }
+
+  const now = Date.now();
+  const lastRecorded = listenTracker.get(nft.address);
+  
+  // Проверяем, что с последней записи прошло минимум 30 секунд
+  if (lastRecorded && (now - lastRecorded) < 30000) {
+    return;
+  }
+
+  try {
+    listenTracker.set(nft.address, now);
+    
+    const response = await fetch('/api/session-listens', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${sessionId}`
+      },
+      body: JSON.stringify({
+        nftAddress: nft.address,
+        timestamp: now
+      })
+    });
+
+    if (!response.ok) {
+      listenTracker.delete(nft.address);
+      
+      if (response.status === 401) {
+        console.error('❌ Сессия истекла при записи прослушивания');
+      } else if (response.status === 429) {
+        console.warn('⚠️ Превышен лимит запросов на прослушивания');
+      } else {
+        console.error('❌ Ошибка при записи прослушивания:', response.status);
+      }
+    } else {
+      const result = await response.json();
+      console.log('✅ Прослушивание записано:', result);
+    }
+  } catch (error) {
+    console.error('❌ Ошибка при записи прослушивания:', error);
+    listenTracker.delete(nft.address);
+  }
+};
 export function PlayerProvider({ children }: PlayerProviderProps) {
   const [currentNft, setCurrentNft] = useState<NFT | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -798,58 +851,6 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
     </PlayerContext.Provider>
   );
 }
-
-const recordListenWithSession = useCallback(async (nft: NFT, sessionId: string) => {
-  if (!nft.address || !nft.collection?.address) {
-    console.warn('❌ Недостаточно данных для записи прослушивания:', {
-      hasAddress: !!nft.address,
-      hasCollectionAddress: !!nft.collection?.address
-    });
-    return;
-  }
-
-  const now = Date.now();
-  const lastRecorded = listenTracker.get(nft.address);
-  
-  // Проверяем, что с последней записи прошло минимум 30 секунд
-  if (lastRecorded && (now - lastRecorded) < 30000) {
-    return;
-  }
-
-  try {
-    listenTracker.set(nft.address, now);
-    
-    const response = await fetch('/api/session-listens', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${sessionId}`
-      },
-      body: JSON.stringify({
-        nftAddress: nft.address,
-        timestamp: now
-      })
-    });
-
-    if (!response.ok) {
-      listenTracker.delete(nft.address);
-      
-      if (response.status === 401) {
-        console.error('❌ Сессия истекла при записи прослушивания');
-      } else if (response.status === 429) {
-        console.warn('⚠️ Превышен лимит запросов на прослушивания');
-      } else {
-        console.error('❌ Ошибка при записи прослушивания:', response.status);
-      }
-    } else {
-      const result = await response.json();
-      console.log('✅ Прослушивание записано:', result);
-    }
-  } catch (error) {
-    console.error('❌ Ошибка при записи прослушивания:', error);
-    listenTracker.delete(nft.address);
-  }
-}, []);
 
 // Обновленная функция для генерации музыки с сессией
 export const generateMusicWithSession = async (nft: NFT, sessionId: string, musicServerUrl: string): Promise<string> => {

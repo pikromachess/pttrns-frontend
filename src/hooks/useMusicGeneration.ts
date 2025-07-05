@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { CHAIN, useTonConnectUI } from '@tonconnect/ui-react';
 import { usePlayer } from '../contexts/PlayerContext';
 import type { NFT } from '../types/nft';
+import { baseUrl } from '../backend-api';
 
 // Кеш для сессионных токенов
 let sessionCache: {
@@ -62,7 +63,7 @@ export function useMusicGeneration() {
       console.log('✅ Сообщение подписано, отправляем на бэкенд...');
 
       // Отправляем подписанные данные на бэкенд для создания сессии
-      const response = await fetch('/api/session/create', {
+      const response = await fetch(`${baseUrl}/api/session/create`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
