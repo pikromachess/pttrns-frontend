@@ -5,6 +5,7 @@ import './App.css';
 import { UpperBar } from './components/UpperBar/UpperBar';
 import { backendApi } from './backend-api';
 import { NavBar } from './components/NavBar/NavBar';
+import { useMusicGeneration } from './hooks/useMusicGeneration';
 import type { Collection } from './types/nft';
 
 // Кеш для коллекций
@@ -27,6 +28,7 @@ function App() {
   const tonConnectButtonRef = useRef<HTMLDivElement | null>(null);
   const upperBarRef = useRef<HTMLDivElement | null>(null);
   const isInitialLoadRef = useRef(true);
+  const { hasActiveSession } = useMusicGeneration();
 
   // Функция для проверки актуальности кеша
   const isCacheValid = () => {
@@ -131,6 +133,7 @@ function App() {
         onSortSelect={onSortSelect}
         searchWidth={searchWidth}
         tonConnectButtonRef={tonConnectButtonRef}
+        hasActiveSession={hasActiveSession}
       />
 
       <div className="main-content">

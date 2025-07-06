@@ -4,6 +4,8 @@ import { motion } from 'framer-motion';
 import { BackendTokenContext } from '../../BackendTokenContext';
 import { triggerHapticFeedback } from '../../helpers';
 import { useNFT } from '../../contexts/NFTContext';
+import { useSession } from '../../contexts/SessionContext';
+import { useToast, Toast } from '../Toast/Toast';
 import { UpperBar } from '../UpperBar/UpperBar';
 import { NFTList } from '../NFTList/NFTList';
 import { NavBar } from '../NavBar/NavBar';
@@ -14,6 +16,8 @@ export default function Library() {
   const wallet = useTonWallet();
   const { token } = useContext(BackendTokenContext);
   const { nfts, loading, error, network, loadNftsForWallet, refreshNfts } = useNFT();
+  const { toastData, hideToast } = useToast();
+  const { hasActiveSession } = useSession();
   
   // Состояние для поиска и сортировки
   const [isSearchVisible, setIsSearchVisible] = useState(false);
@@ -124,11 +128,20 @@ export default function Library() {
         onSortSelect={handleSortSelect}
         searchWidth={searchWidth}
         tonConnectButtonRef={tonConnectButtonRef}
+        hasActiveSession={hasActiveSession}
       />
       <div className="main-content">
         {renderMainContent()}
       </div>
       <NavBar />
+      
+      {/* Toast уведомления */}
+      <Toast
+        isVisible={toastData.isVisible}
+        message={toastData.message}
+        type={toastData.type}
+        onClose={hideToast}
+      />
     </div>
   );
 }

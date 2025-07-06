@@ -8,6 +8,7 @@ import { ErrorState } from './ErrorState';
 import { EmptyState } from './EmptyState';
 import { NavBar } from '../NavBar/NavBar';
 import { UpperBar } from '../UpperBar/UpperBar';
+import { useMusicGeneration } from '../../hooks/useMusicGeneration';
 import '../../App.css';
 import type { Collection, NFTWithListens } from '../../types/nft';
 import { useCustomBackButton } from '../../hooks/useCustomBackButton';
@@ -25,6 +26,7 @@ export default function CollectionPage() {
   const tonConnectButtonRef = useRef<HTMLDivElement | null>(null);
   const upperBarRef = useRef<HTMLDivElement | null>(null); 
   const navigate = useNavigate();
+  const { hasActiveSession } = useMusicGeneration();
 
   useCustomBackButton({
     onBack: () => {      
@@ -95,6 +97,7 @@ export default function CollectionPage() {
         onSortSelect={onSortSelect}
         searchWidth={searchWidth}
         tonConnectButtonRef={tonConnectButtonRef}
+        hasActiveSession={hasActiveSession}
       />
 
       <div className="main-content">

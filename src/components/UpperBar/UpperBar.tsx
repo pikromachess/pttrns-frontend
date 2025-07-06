@@ -14,6 +14,7 @@ interface UpperBarProps {
   onSortSelect: (sortOption: string) => void;
   searchWidth: () => number;
   tonConnectButtonRef: React.RefObject<HTMLDivElement | null>;
+  hasActiveSession?: boolean; // Новый пропс для индикации активной сессии
 }
 
 export const UpperBar = forwardRef<HTMLDivElement | null, UpperBarProps>(({
@@ -26,6 +27,7 @@ export const UpperBar = forwardRef<HTMLDivElement | null, UpperBarProps>(({
   onSortSelect,
   searchWidth,
   tonConnectButtonRef,
+  hasActiveSession = false,
 }, ref) => {
   const isTelegram = !!(window.Telegram && window.Telegram.WebApp);
   const telegramAvatar = isTelegram && window.Telegram.WebApp.initDataUnsafe?.user?.photo_url;  
@@ -53,7 +55,14 @@ export const UpperBar = forwardRef<HTMLDivElement | null, UpperBarProps>(({
         <img
           src={icon}
           alt="App Icon"
-          style={upperBarStyles.appIcon}
+          style={{
+            ...upperBarStyles.appIcon,
+            // Применяем голубой фильтр когда сессия активна
+            filter: hasActiveSession 
+              ? 'brightness(0) saturate(100%) invert(64%) sepia(96%) saturate(459%) hue-rotate(166deg) brightness(91%) contrast(89%)' 
+              : 'none',
+            transition: 'filter 0.3s ease'
+          }}
         />
         
         {isTelegram && telegramAvatar && (

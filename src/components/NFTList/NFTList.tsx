@@ -4,13 +4,21 @@ import { usePlayer } from '../../contexts/PlayerContext';
 import { useNFTSearch } from '../../hooks/useNFTSearch';
 import { useMusicGeneration } from '../../hooks/useMusicGeneration';
 import { PlayingAnimation } from '../PlayingAnimation/PlayingAnimation';
+import { SessionWarningModal } from '../SessionWarningModal/SessionWarningModal';
 import type { NFTListProps } from '../../types/nft';
 import { nftListStyles } from './NFTList.styles';
 
 export function NFTList({ nfts, loading, error, searchQuery, sortBy }: NFTListProps) {
   const { updatePlaylist, currentNft, isPlaying, isLoadingTrack } = usePlayer();
   const { filteredNfts } = useNFTSearch(nfts, searchQuery, sortBy);
-  const { generatingMusic, handleNftClick, isCreatingSession } = useMusicGeneration();
+  const { 
+    generatingMusic, 
+    handleNftClick, 
+    isCreatingSession,
+    showSessionWarning,
+    handleSessionWarningConfirm,
+    handleSessionWarningCancel  
+  } = useMusicGeneration();
 
   useEffect(() => {    
     updatePlaylist(filteredNfts);
@@ -153,6 +161,13 @@ export function NFTList({ nfts, loading, error, searchQuery, sortBy }: NFTListPr
           );
         })}
       </div>
+      
+      {/* Модальное окно предупреждения о сессии */}
+      <SessionWarningModal
+        isVisible={showSessionWarning}
+        onConfirm={handleSessionWarningConfirm}
+        onCancel={handleSessionWarningCancel}
+      />
       
       {/* CSS для анимации загрузки */}
       <style>

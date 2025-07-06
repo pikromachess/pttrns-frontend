@@ -1,6 +1,8 @@
 import { useState, useCallback } from 'react';
 import { CHAIN, useTonConnectUI } from '@tonconnect/ui-react';
 import { usePlayer } from '../contexts/PlayerContext';
+import { useSession } from '../contexts/SessionContext';
+import { useToast } from '../components/Toast/Toast';
 import type { NFT } from '../types/nft';
 import { baseUrl } from '../backend-api';
 import { 
@@ -12,35 +14,46 @@ import {
   safeParseJson
 } from '../utils/debugUtils';
 
-// Кеш для сессионных токенов
-let sessionCache: {
-  sessionId: string;
-  expiresAt: Date;
-  musicServerUrl: string;
-} | null = null;
+// Убираем локальный кеш - теперь используем глобальный контекст
 
 export function useMusicGeneration() {
   const { playNft } = usePlayer();  
   const [tonConnectUI] = useTonConnectUI();
+  const { showToast } = useToast();
+  const { 
+    hasActiveSession, 
+    sessionId, 
+    musicServerUrl, 
+    setSessionData, 
+    clearSession,
+    checkSessionValidity 
+  } = useSession();
   const [generatingMusic, setGeneratingMusic] = useState<string | null>(null);
   const [isCreatingSession, setIsCreatingSession] = useState(false);
+  const [showSessionWarning, setShowSessionWarning] = useState(false);
+  const [pendingNft, setPendingNft] = useState<{nft: NFT, allNfts: NFT[]} | null>(null);
 
   // Функция для получения ключа кеша NFT
   const getNftCacheKey = useCallback((nft: NFT): string => {
     return nft.address || `index-${nft.index}`;
   }, []);
 
+  // Проверяем, есть ли активная сессия
+  const hasValidSession = useCallback((): boolean => {
+    return checkSessionValidity();
+  }, [checkSessionValidity]);
+
   // Функция для создания сессии прослушивания
   const createListeningSession = useCallback(async (): Promise<{sessionId: string, musicServerUrl: string} | null> => {
     try {
       console.log('🔐 Создание сессии прослушивания...');
       
-      // Проверяем кеш сессии
-      if (sessionCache && new Date() < sessionCache.expiresAt) {
-        console.log('✅ Используем кешированную сессию');
+      // Проверяем кеш сессии через контекст
+      if (hasActiveSession && sessionId && musicServerUrl) {
+        console.log('✅ Используем кешированную сессию из контекста');
         return {
-          sessionId: sessionCache.sessionId,
-          musicServerUrl: sessionCache.musicServerUrl
+          sessionId,
+          musicServerUrl
         };
       }
 
@@ -127,28 +140,28 @@ export function useMusicGeneration() {
         throw new Error(`Ошибка парсинга ответа: ${parseResult.error}`);
       }
 
-      const sessionData = parseResult.data;
+      const sessionDataResponse = parseResult.data;
       
       console.log('✅ Сессия создана успешно:', {
-        sessionId: sessionData.sessionId.slice(0, 20) + '...',
-        musicServerUrl: sessionData.musicServerUrl,
-        expiresAt: sessionData.expiresAt
+        sessionId: sessionDataResponse.sessionId.slice(0, 20) + '...',
+        musicServerUrl: sessionDataResponse.musicServerUrl,
+        expiresAt: sessionDataResponse.expiresAt
       });
       
-      // Кешируем сессию
-      sessionCache = {
-        sessionId: sessionData.sessionId,
-        expiresAt: new Date(sessionData.expiresAt),
-        musicServerUrl: sessionData.musicServerUrl
-      };
+      // Сохраняем в глобальный контекст
+      setSessionData(
+        sessionDataResponse.sessionId,
+        sessionDataResponse.musicServerUrl,
+        new Date(sessionDataResponse.expiresAt)
+      );
       
       if (window.Telegram?.WebApp?.HapticFeedback) {
         window.Telegram.WebApp.HapticFeedback.notificationOccurred('success');
       }
 
       return {
-        sessionId: sessionData.sessionId,
-        musicServerUrl: sessionData.musicServerUrl
+        sessionId: sessionDataResponse.sessionId,
+        musicServerUrl: sessionDataResponse.musicServerUrl
       };
 
     } catch (error) {
@@ -170,7 +183,45 @@ export function useMusicGeneration() {
     } finally {
       setIsCreatingSession(false);
     }
-  }, [tonConnectUI]);
+  }, [tonConnectUI, hasActiveSession, sessionId, musicServerUrl, setSessionData]);
+
+  // Функция для обработки подтверждения создания сессии
+  const handleSessionWarningConfirm = useCallback(async () => {
+    setShowSessionWarning(false);
+    
+    if (!pendingNft) return;
+    
+    try {
+      // Создаем сессию
+      const sessionData = await createListeningSession();
+      
+      if (sessionData) {
+        // Сессия создана успешно, но НЕ запускаем воспроизведение автоматически
+        console.log('✅ Сессия создана. Для воспроизведения нажмите на трек еще раз.');
+        
+        // Показываем уведомление пользователю
+        showToast('Сессия создана! Теперь можно воспроизводить музыку', 'success', 4000);
+        
+        if (window.Telegram?.WebApp?.HapticFeedback) {
+          window.Telegram.WebApp.HapticFeedback.notificationOccurred('success');
+        }
+      }
+    } catch (error) {
+      console.error('❌ Ошибка при создании сессии:', error);
+    } finally {
+      setPendingNft(null);
+    }
+  }, [pendingNft, createListeningSession]);
+
+  // Функция для обработки отмены создания сессии
+  const handleSessionWarningCancel = useCallback(() => {
+    setShowSessionWarning(false);
+    setPendingNft(null);
+    
+    if (window.Telegram?.WebApp?.HapticFeedback) {
+      window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
+    }
+  }, []);
 
   // Основная функция генерации музыки
   const generateMusicForNft = useCallback(async (selectedNft: NFT, allNfts: NFT[]) => {
@@ -178,6 +229,21 @@ export function useMusicGeneration() {
     
     // Проверяем, не генерируется ли уже музыка для этого NFT
     if (generatingMusic === nftId || isCreatingSession) {
+      return;
+    }
+
+    // Проверяем, есть ли активная сессия
+    if (!hasValidSession()) {
+      console.log('🔐 Нет активной сессии, показываем предупреждение');
+      
+      // Сохраняем информацию о треке для последующего воспроизведения
+      setPendingNft({ nft: selectedNft, allNfts });
+      setShowSessionWarning(true);
+      
+      if (window.Telegram?.WebApp?.HapticFeedback) {
+        window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
+      }
+      
       return;
     }
 
@@ -208,18 +274,21 @@ export function useMusicGeneration() {
         window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
       }
       
-      // Создаем сессию прослушивания
-      const sessionData = await createListeningSession();
-      if (!sessionData) {
-        // Пользователь отклонил подпись или произошла ошибка
-        return;
+      // Используем существующую сессию из контекста
+      if (!sessionId || !musicServerUrl) {
+        throw new Error('Сессия недоступна');
       }
+
+      const sessionDataToUse = {
+        sessionId,
+        musicServerUrl
+      };
 
       // ИСПРАВЛЕНО: Обогащаем ВСЕ NFT в плейлисте сессионными данными
       const enrichedPlaylist = allNfts.map(playlistNft => ({
         ...playlistNft,
-        sessionId: sessionData.sessionId,
-        musicServerUrl: sessionData.musicServerUrl,
+        sessionId: sessionDataToUse.sessionId,
+        musicServerUrl: sessionDataToUse.musicServerUrl,
         // Если у NFT в плейлисте нет коллекции, но мы знаем коллекцию из контекста
         collection: playlistNft.collection?.address 
           ? playlistNft.collection 
@@ -229,8 +298,8 @@ export function useMusicGeneration() {
       // Обогащаем выбранный NFT
       const enrichedNft = {
         ...nftToPlay,
-        sessionId: sessionData.sessionId,
-        musicServerUrl: sessionData.musicServerUrl
+        sessionId: sessionDataToUse.sessionId,
+        musicServerUrl: sessionDataToUse.musicServerUrl
       };
       
       // Формируем плейлист: начиная с выбранного трека
@@ -253,7 +322,7 @@ export function useMusicGeneration() {
       
       console.log('🎵 Запускаем воспроизведение с сессионными данными:', {
         selectedNft: enrichedNft.metadata?.name,
-        sessionId: sessionData.sessionId.slice(0, 20) + '...',
+        sessionId: sessionDataToUse.sessionId.slice(0, 20) + '...',
         playlistLength: orderedPlaylist.length,
         playlistWithSession: orderedPlaylist.every(nft => nft.sessionId && nft.musicServerUrl)
       });
@@ -266,13 +335,14 @@ export function useMusicGeneration() {
       
       if (error instanceof Error) {
         if (error.message.includes('Сессия истекла')) {
-          // Очищаем кеш и пробуем еще раз
-          sessionCache = null;
-          alert('Сессия истекла. Попробуйте еще раз.');
+          // Очищаем сессию и показываем предупреждение снова
+          clearSession();
+          setPendingNft({ nft: selectedNft, allNfts });
+          setShowSessionWarning(true);
         } else if (error.message.includes('401') || error.message.includes('Authentication required')) {
           // Проблема с аутентификацией
-          sessionCache = null;
-          alert('Ошибка аутентификации. Пожалуйста, попробуйте еще раз.');
+          clearSession();
+          alert('Ошибка аутентификации. Пожалуйста, создайте сессию заново.');
         } else if (error.message.includes('503') || error.message.includes('недоступен')) {
           alert('Сервис генерации музыки временно недоступен. Попробуйте позже.');
         } else {
@@ -284,7 +354,7 @@ export function useMusicGeneration() {
     } finally {
       setGeneratingMusic(null);
     }
-  }, [createListeningSession, playNft, generatingMusic, isCreatingSession, getNftCacheKey]);
+  }, [playNft, generatingMusic, isCreatingSession, getNftCacheKey, hasValidSession, sessionId, musicServerUrl, clearSession]);
 
   const handleNftClick = useCallback((nft: NFT, allNfts: NFT[]) => {
     generateMusicForNft(nft, allNfts);
@@ -295,5 +365,10 @@ export function useMusicGeneration() {
     generateMusicForNft,
     handleNftClick,
     isCreatingSession,
+    showSessionWarning,
+    handleSessionWarningConfirm,
+    handleSessionWarningCancel,
+    hasActiveSession,
+    showToast, // Экспортируем для использования в компонентах
   };
 }

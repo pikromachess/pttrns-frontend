@@ -8,6 +8,7 @@ import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { TonConnectUIProvider } from '@tonconnect/ui-react';
 import { NavBarProvider } from './contexts/NavBarContext.tsx';
 import { PlayerProvider } from './contexts/PlayerContext';
+import { SessionProvider } from './contexts/SessionContext';
 import { MiniPlayer } from './components/MiniPlayer/MiniPlayer.tsx';
 import { NFTProvider } from './contexts/NFTContext';
 import { BackendTokenContext } from './BackendTokenContext';
@@ -120,18 +121,20 @@ function Root() {
     <TonConnectUIProvider manifestUrl="https://pikromachess-pttrns-frontend-dc0f.twc1.net/tonconnect-manifest.json">
       <BackendTokenContext.Provider value={{ token, setToken }}>
         <ProvideBackendAuth />
-        <PlayerProvider>
-          <NFTProvider>
-            <BrowserRouter>
-              <NavBarProvider>
-                <TelegramBackButton>
-                  <AnimatedRoutes />
-                  <MiniPlayer />
-                </TelegramBackButton>
-              </NavBarProvider>
-            </BrowserRouter>
-          </NFTProvider>
-        </PlayerProvider>
+        <SessionProvider>
+          <PlayerProvider>
+            <NFTProvider>
+              <BrowserRouter>
+                <NavBarProvider>
+                  <TelegramBackButton>
+                    <AnimatedRoutes />
+                    <MiniPlayer />
+                  </TelegramBackButton>
+                </NavBarProvider>
+              </BrowserRouter>
+            </NFTProvider>
+          </PlayerProvider>
+        </SessionProvider>
       </BackendTokenContext.Provider>
     </TonConnectUIProvider>
   );
