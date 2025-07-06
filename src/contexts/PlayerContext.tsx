@@ -19,6 +19,11 @@ const musicCache = new Map<string, string>();
 // Трекер прослушиваний для избежания дублирования
 const listenTracker = new Map<string, number>();
 
+// ИСПРАВЛЕННАЯ функция для расчета порога прослушивания
+const calculateListenThreshold = (duration: number): number => {
+  return duration < 30 ? duration * 0.8 : 30;
+};
+
 // ИСПРАВЛЕННАЯ функция для записи прослушивания через сессию
 const recordListenWithSession = async (nft: NFT, sessionId: string) => {
   if (!nft.address || !nft.collection?.address) {
@@ -473,7 +478,7 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
     }
   };
 
-  // ИСПРАВЛЕННАЯ функция таймера прогресса с улучшенной логикой записи прослушиваний
+  // ИСПРАВЛЕННАЯ функция таймера прогресса с правильной логикой записи прослушиваний
   const startProgressTimer = useCallback(() => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
@@ -495,7 +500,8 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
             lastUpdateTimeRef.current = now; // Обновляем время
           }
           
-          const listenThreshold = Math.max(15, Math.min(30, duration * 0.5));
+          // ИСПРАВЛЕНО: Используем новую логику расчета порога
+          const listenThreshold = calculateListenThreshold(duration);
           
           console.log('⏱️ Прогресс воспроизведения (fallback):', {
             currentTime: newTime,
@@ -555,7 +561,8 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
         lastUpdateTimeRef.current = now;
       }
       
-      const listenThreshold = Math.max(15, Math.min(30, actualDuration * 0.5));
+      // ИСПРАВЛЕНО: Используем новую логику расчета порога
+      const listenThreshold = calculateListenThreshold(actualDuration);
       
       console.log('⏱️ Прогресс воспроизведения (реальное аудио):', {
         actualTime: Math.round(actualTime * 100) / 100,
@@ -580,7 +587,9 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
       // Переключаем на следующий трек в конце
       if (actualTime >= actualDuration - 0.5) {
         // Записываем прослушивание в конце если еще не записали и прослушали достаточно
-        if (!listenRecordedRef.current && currentNft && actualPlaytimeRef.current >= Math.max(10, actualDuration * 0.3)) {
+        // ИСПРАВЛЕНО: Используем новую логику для backup записи
+        const backupThreshold = calculateListenThreshold(actualDuration) * 0.3; // 30% от нового порога
+        if (!listenRecordedRef.current && currentNft && actualPlaytimeRef.current >= backupThreshold) {
           console.log('🎯 Записываем прослушивание в конце трека...');
           const nftToRecord = { ...currentNft };
           listenRecordedRef.current = true;
