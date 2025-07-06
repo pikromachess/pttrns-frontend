@@ -1,8 +1,19 @@
+// В src/hooks/useMusicGeneration.ts
+
 import { useState, useCallback } from 'react';
 import { CHAIN, useTonConnectUI } from '@tonconnect/ui-react';
 import { usePlayer } from '../contexts/PlayerContext';
 import type { NFT } from '../types/nft';
 import { baseUrl } from '../backend-api';
+import { 
+  logSessionRequest, 
+  logBackendResponse, 
+  logMusicRequest,
+  createDetailedErrorMessage,
+  validateSessionData,
+  validateTimestamp,
+  safeParseJson
+} from '../utils/debugUtils';
 
 // Кеш для сессионных токенов
 let sessionCache: {
@@ -60,29 +71,75 @@ export function useMusicGeneration() {
         return null;
       }
 
-      console.log('✅ Сообщение подписано, отправляем на бэкенд...');
+      console.log('✅ Сообщение подписано, проверяем данные...');
+
+      // Валидируем полученные данные
+      const validation = validateSessionData(signResult);
+      if (!validation.isValid) {
+        throw new Error(`Некорректные данные подписи: ${validation.errors.join(', ')}`);
+      }
+
+      // Проверяем временную метку
+      const timestampValidation = validateTimestamp(signResult.timestamp);
+      if (!timestampValidation.isValid) {
+        throw new Error(timestampValidation.message || 'Некорректная временная метка');
+      }
+
+      // Логируем детали запроса
+      logSessionRequest(signResult);
 
       // Отправляем подписанные данные на бэкенд для создания сессии
+      // Используем только поля, которые есть в SignDataResponse
+      const requestBody = {
+        signature: signResult.signature,
+        address: signResult.address,
+        timestamp: signResult.timestamp,
+        domain: signResult.domain,
+        payload: signResult.payload,
+        // Убираем поля, которых нет в официальном API
+        // public_key и walletStateInit будут получены на бэкенде другим способом
+      };
+
+      console.log('📡 Отправляем данные на создание сессии:', {
+        address: requestBody.address,
+        domain: requestBody.domain,
+        timestamp: requestBody.timestamp,
+        hasSignature: !!requestBody.signature,
+        payloadType: requestBody.payload.type
+      });
+
       const response = await fetch(`${baseUrl}/api/session/create`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          signature: signResult.signature,
-          address: signResult.address,
-          timestamp: signResult.timestamp,
-          domain: signResult.domain,
-          payload: signResult.payload          
-        })
+        body: JSON.stringify(requestBody)
       });
 
+      const responseText = await response.text();
+      logBackendResponse(response, responseText);
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Ошибка создания сессии: ${response.status}`);
+        const parseResult = safeParseJson(responseText);
+        const errorMessage = parseResult.success 
+          ? parseResult.data?.error || `Ошибка HTTP ${response.status}`
+          : `Ошибка сервера: ${response.status} - ${responseText}`;
+        
+        throw new Error(errorMessage);
       }
 
-      const sessionData = await response.json();
+      const parseResult = safeParseJson(responseText);
+      if (!parseResult.success) {
+        throw new Error(`Ошибка парсинга ответа: ${parseResult.error}`);
+      }
+
+      const sessionData = parseResult.data;
+      
+      console.log('✅ Сессия создана успешно:', {
+        sessionId: sessionData.sessionId.slice(0, 20) + '...',
+        musicServerUrl: sessionData.musicServerUrl,
+        expiresAt: sessionData.expiresAt
+      });
       
       // Кешируем сессию
       sessionCache = {
@@ -90,8 +147,6 @@ export function useMusicGeneration() {
         expiresAt: new Date(sessionData.expiresAt),
         musicServerUrl: sessionData.musicServerUrl
       };
-
-      console.log('✅ Сессия создана успешно');
       
       if (window.Telegram?.WebApp?.HapticFeedback) {
         window.Telegram.WebApp.HapticFeedback.notificationOccurred('success');
@@ -105,19 +160,12 @@ export function useMusicGeneration() {
     } catch (error) {
       console.error('❌ Ошибка создания сессии:', error);
       
-      if (error instanceof Error) {
-        if (error.message.includes('User rejected')) {
-          // Пользователь отклонил подпись - не показываем ошибку
-          return null;
-        } else if (error.message.includes('Подпись устарела')) {
-          alert('Подпись устарела. Попробуйте еще раз.');
-        } else if (error.message.includes('Неверная подпись')) {
-          alert('Ошибка проверки подписи. Попробуйте еще раз.');
-        } else {
-          alert(`Ошибка создания сессии: ${error.message}`);
-        }
-      } else {
-        alert('Неизвестная ошибка при создании сессии');
+      const detailedError = createDetailedErrorMessage(error, 'createListeningSession');
+      console.error('📋 Детальная ошибка:', detailedError);
+      
+      // Показываем ошибку только если это не отказ пользователя от подписи
+      if (detailedError.code !== 'USER_REJECTED') {
+        alert(detailedError.message);
       }
       
       if (window.Telegram?.WebApp?.HapticFeedback) {
@@ -132,7 +180,8 @@ export function useMusicGeneration() {
 
   // Функция для генерации музыки с сессионным токеном
   const generateMusicWithSession = useCallback(async (nft: NFT, sessionId: string, musicServerUrl: string): Promise<string> => {
-    console.log('🎵 Генерация музыки через сессию...');
+    // Логируем детали запроса
+    logMusicRequest(nft, sessionId, musicServerUrl);
     
     const response = await fetch(`${musicServerUrl}/generate-music-stream`, {
       method: 'POST',
@@ -147,7 +196,21 @@ export function useMusicGeneration() {
       })
     });
 
+    const responseText = await response.text();
+    
+    console.log('📡 Ответ от музыкального сервера:', {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok,
+      contentType: response.headers.get('content-type'),
+      contentLength: response.headers.get('content-length'),
+      responseLength: responseText.length,
+      isAudio: response.headers.get('content-type')?.includes('audio') || false
+    });
+
     if (!response.ok) {
+      console.error('❌ Ошибка от музыкального сервера:', responseText);
+      
       if (response.status === 401) {
         // Сессия истекла, очищаем кеш
         sessionCache = null;
@@ -159,11 +222,13 @@ export function useMusicGeneration() {
       } else if (response.status === 503) {
         throw new Error('Сервис генерации музыки временно недоступен');
       }
-      throw new Error(`Ошибка сервера: ${response.status}`);
+      
+      throw new Error(`Ошибка сервера: ${response.status} - ${responseText}`);
     }
 
-    const audioBlob = await response.blob();
-    console.log('✅ Музыка сгенерирована успешно');
+    // Для аудио ответа читаем как blob
+    const audioBlob = new Blob([responseText], { type: response.headers.get('content-type') || 'audio/wav' });
+    console.log('✅ Музыка сгенерирована успешно, размер:', audioBlob.size);
     return URL.createObjectURL(audioBlob);
   }, []);
 
