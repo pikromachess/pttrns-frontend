@@ -5,8 +5,7 @@ import type { NFT } from '../types/nft';
 import { baseUrl } from '../backend-api';
 import { 
   logSessionRequest, 
-  logBackendResponse, 
-  logMusicRequest,
+  logBackendResponse,   
   createDetailedErrorMessage,
   validateSessionData,
   validateTimestamp,
@@ -173,78 +172,6 @@ export function useMusicGeneration() {
     }
   }, [tonConnectUI]);
 
-  // Функция для генерации музыки с сессионным токеном
-  const generateMusicWithSession = useCallback(async (nft: NFT, sessionId: string, musicServerUrl: string): Promise<string> => {
-    // Логируем детали запроса
-    logMusicRequest(nft, sessionId, musicServerUrl);
-    
-    const response = await fetch(`${musicServerUrl}/generate-music-stream`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${sessionId}`,
-      },
-      body: JSON.stringify({
-        metadata: nft.metadata,
-        index: nft.index,
-        address: nft.address
-      })
-    });
-
-    console.log('📡 Ответ от музыкального сервера:', {
-      status: response.status,
-      statusText: response.statusText,
-      ok: response.ok,
-      contentType: response.headers.get('content-type'),
-      contentLength: response.headers.get('content-length'),
-      isAudio: response.headers.get('content-type')?.includes('audio') || false
-    });
-
-    if (!response.ok) {
-      // Для не-JSON ответов (например, HTML ошибки) читаем как текст
-      let errorText: string;
-      try {
-        const contentType = response.headers.get('content-type');
-        if (contentType?.includes('application/json')) {
-          const errorData = await response.json();
-          errorText = errorData.detail || errorData.message || `HTTP ${response.status}`;
-        } else {
-          errorText = await response.text();
-        }
-      } catch {
-        errorText = `HTTP ${response.status} ${response.statusText}`;
-      }
-      
-      console.error('❌ Ошибка от музыкального сервера:', errorText);
-      
-      if (response.status === 401) {
-        // Сессия истекла, очищаем кеш
-        sessionCache = null;
-        throw new Error('Сессия истекла');
-      } else if (response.status === 403) {
-        throw new Error('Нет доступа к генерации музыки');
-      } else if (response.status === 429) {
-        throw new Error('Превышен лимит запросов');
-      } else if (response.status === 503) {
-        throw new Error('Сервис генерации музыки временно недоступен');
-      }
-      
-      throw new Error(`Ошибка сервера: ${response.status} - ${errorText}`);
-    }
-
-    // Проверяем, что получили аудио
-    const contentType = response.headers.get('content-type');
-    if (!contentType?.includes('audio')) {
-      console.error('❌ Получен не аудио ответ:', contentType);
-      throw new Error('Получен некорректный тип ответа от сервера');
-    }
-
-    // Читаем аудио как blob
-    const audioBlob = await response.blob();
-    console.log('✅ Музыка сгенерирована успешно, размер:', audioBlob.size);
-    return URL.createObjectURL(audioBlob);
-  }, []);
-
   // Основная функция генерации музыки
   const generateMusicForNft = useCallback(async (selectedNft: NFT, allNfts: NFT[]) => {
     const nftId = selectedNft.address || `${selectedNft.index}`;
@@ -288,34 +215,23 @@ export function useMusicGeneration() {
         return;
       }
 
-      // Генерируем музыку с сессионным токеном
-      const audioUrl = await generateMusicWithSession(nftToPlay, sessionData.sessionId, sessionData.musicServerUrl);
+      // ИСПРАВЛЕНО: Обогащаем ВСЕ NFT в плейлисте сессионными данными
+      const enrichedPlaylist = allNfts.map(playlistNft => ({
+        ...playlistNft,
+        sessionId: sessionData.sessionId,
+        musicServerUrl: sessionData.musicServerUrl,
+        // Если у NFT в плейлисте нет коллекции, но мы знаем коллекцию из контекста
+        collection: playlistNft.collection?.address 
+          ? playlistNft.collection 
+          : (nftToPlay.collection?.address ? nftToPlay.collection : playlistNft.collection)
+      }));
       
-      // Добавляем сессионные данные в NFT для дальнейшего использования
+      // Обогащаем выбранный NFT
       const enrichedNft = {
         ...nftToPlay,
-        audioUrl,
         sessionId: sessionData.sessionId,
         musicServerUrl: sessionData.musicServerUrl
       };
-      
-      // Убеждаемся, что все NFT в плейлисте имеют правильную информацию о коллекции
-      const enrichedPlaylist = allNfts.map(playlistNft => {
-        // Если у NFT в плейлисте нет коллекции, но мы знаем коллекцию из контекста
-        if (!playlistNft.collection?.address && nftToPlay.collection?.address) {
-          return {
-            ...playlistNft,
-            collection: nftToPlay.collection,
-            sessionId: sessionData.sessionId,
-            musicServerUrl: sessionData.musicServerUrl
-          };
-        }
-        return {
-          ...playlistNft,
-          sessionId: sessionData.sessionId,
-          musicServerUrl: sessionData.musicServerUrl
-        };
-      });
       
       // Формируем плейлист: начиная с выбранного трека
       const selectedIndex = enrichedPlaylist.findIndex(item => 
@@ -334,6 +250,13 @@ export function useMusicGeneration() {
         // Если трек не найден, просто используем весь список
         orderedPlaylist = enrichedPlaylist;
       }
+      
+      console.log('🎵 Запускаем воспроизведение с сессионными данными:', {
+        selectedNft: enrichedNft.metadata?.name,
+        sessionId: sessionData.sessionId.slice(0, 20) + '...',
+        playlistLength: orderedPlaylist.length,
+        playlistWithSession: orderedPlaylist.every(nft => nft.sessionId && nft.musicServerUrl)
+      });
       
       // Запускаем воспроизведение с правильным плейлистом
       await playNft(enrichedNft, orderedPlaylist);
@@ -361,7 +284,7 @@ export function useMusicGeneration() {
     } finally {
       setGeneratingMusic(null);
     }
-  }, [createListeningSession, generateMusicWithSession, playNft, generatingMusic, isCreatingSession, getNftCacheKey]);
+  }, [createListeningSession, playNft, generatingMusic, isCreatingSession, getNftCacheKey]);
 
   const handleNftClick = useCallback((nft: NFT, allNfts: NFT[]) => {
     generateMusicForNft(nft, allNfts);
