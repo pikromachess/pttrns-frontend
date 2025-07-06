@@ -1,5 +1,3 @@
-// В src/hooks/useMusicGeneration.ts
-
 import { useState, useCallback } from 'react';
 import { CHAIN, useTonConnectUI } from '@tonconnect/ui-react';
 import { usePlayer } from '../contexts/PlayerContext';
@@ -89,15 +87,12 @@ export function useMusicGeneration() {
       logSessionRequest(signResult);
 
       // Отправляем подписанные данные на бэкенд для создания сессии
-      // Используем только поля, которые есть в SignDataResponse
       const requestBody = {
         signature: signResult.signature,
         address: signResult.address,
         timestamp: signResult.timestamp,
         domain: signResult.domain,
         payload: signResult.payload,
-        // Убираем поля, которых нет в официальном API
-        // public_key и walletStateInit будут получены на бэкенде другим способом
       };
 
       console.log('📡 Отправляем данные на создание сессии:', {
@@ -196,20 +191,31 @@ export function useMusicGeneration() {
       })
     });
 
-    const responseText = await response.text();
-    
     console.log('📡 Ответ от музыкального сервера:', {
       status: response.status,
       statusText: response.statusText,
       ok: response.ok,
       contentType: response.headers.get('content-type'),
       contentLength: response.headers.get('content-length'),
-      responseLength: responseText.length,
       isAudio: response.headers.get('content-type')?.includes('audio') || false
     });
 
     if (!response.ok) {
-      console.error('❌ Ошибка от музыкального сервера:', responseText);
+      // Для не-JSON ответов (например, HTML ошибки) читаем как текст
+      let errorText: string;
+      try {
+        const contentType = response.headers.get('content-type');
+        if (contentType?.includes('application/json')) {
+          const errorData = await response.json();
+          errorText = errorData.detail || errorData.message || `HTTP ${response.status}`;
+        } else {
+          errorText = await response.text();
+        }
+      } catch {
+        errorText = `HTTP ${response.status} ${response.statusText}`;
+      }
+      
+      console.error('❌ Ошибка от музыкального сервера:', errorText);
       
       if (response.status === 401) {
         // Сессия истекла, очищаем кеш
@@ -223,11 +229,18 @@ export function useMusicGeneration() {
         throw new Error('Сервис генерации музыки временно недоступен');
       }
       
-      throw new Error(`Ошибка сервера: ${response.status} - ${responseText}`);
+      throw new Error(`Ошибка сервера: ${response.status} - ${errorText}`);
     }
 
-    // Для аудио ответа читаем как blob
-    const audioBlob = new Blob([responseText], { type: response.headers.get('content-type') || 'audio/wav' });
+    // Проверяем, что получили аудио
+    const contentType = response.headers.get('content-type');
+    if (!contentType?.includes('audio')) {
+      console.error('❌ Получен не аудио ответ:', contentType);
+      throw new Error('Получен некорректный тип ответа от сервера');
+    }
+
+    // Читаем аудио как blob
+    const audioBlob = await response.blob();
     console.log('✅ Музыка сгенерирована успешно, размер:', audioBlob.size);
     return URL.createObjectURL(audioBlob);
   }, []);
@@ -333,6 +346,12 @@ export function useMusicGeneration() {
           // Очищаем кеш и пробуем еще раз
           sessionCache = null;
           alert('Сессия истекла. Попробуйте еще раз.');
+        } else if (error.message.includes('401') || error.message.includes('Authentication required')) {
+          // Проблема с аутентификацией
+          sessionCache = null;
+          alert('Ошибка аутентификации. Пожалуйста, попробуйте еще раз.');
+        } else if (error.message.includes('503') || error.message.includes('недоступен')) {
+          alert('Сервис генерации музыки временно недоступен. Попробуйте позже.');
         } else {
           alert(`Ошибка при генерации музыки: ${error.message}`);
         }
