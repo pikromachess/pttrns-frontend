@@ -6,6 +6,8 @@ export const baseUrl = 'https://pttrns-backend-ts.vercel.app';
 // export const baseUrl = 'http://localhost:3000'; 
 
 export class BackendApi {
+    // Добавляем свойство для доступа к baseUrl
+    public baseUrl = baseUrl;
 
     async generatePayload(): Promise<string | undefined> {
         try {
@@ -162,8 +164,15 @@ export class BackendApi {
         }
     }
 
+    // ИСПРАВЛЕННАЯ функция для записи прослушивания
     async recordListen(nftAddress: string, collectionAddress: string): Promise<boolean> {
         try {
+            console.log('📊 Отправляем запрос на запись прослушивания (legacy API):', {
+                nftAddress,
+                collectionAddress,
+                url: `${baseUrl}/api/listens`
+            });
+
             const response = await fetch(`${baseUrl}/api/listens`, {
                 method: 'POST',
                 headers: {
@@ -174,9 +183,18 @@ export class BackendApi {
                     collectionAddress
                 })
             });
-            return response.ok;
+
+            if (!response.ok) {
+                console.error('❌ Ошибка записи прослушивания:', response.status, await response.text());
+                return false;
+            }
+
+            const result = await response.json();
+            console.log('✅ Прослушивание записано через legacy API:', result);
+            return true;
+
         } catch (e) {
-            console.error('Ошибка при записи прослушивания:', e);
+            console.error('❌ Критическая ошибка при записи прослушивания:', e);
             return false;
         }
     }

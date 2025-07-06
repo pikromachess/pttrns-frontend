@@ -19,14 +19,14 @@ const musicCache = new Map<string, string>();
 // Трекер прослушиваний для избежания дублирования
 const listenTracker = new Map<string, number>();
 
-// Функция для записи прослушивания через сессию
+// ИСПРАВЛЕННАЯ функция для записи прослушивания через сессию
 const recordListenWithSession = async (nft: NFT, sessionId: string) => {
   if (!nft.address || !nft.collection?.address) {
     console.warn('❌ Недостаточно данных для записи прослушивания:', {
       hasAddress: !!nft.address,
       hasCollectionAddress: !!nft.collection?.address
     });
-    return;
+    return false;
   }
 
   const now = Date.now();
@@ -34,13 +34,21 @@ const recordListenWithSession = async (nft: NFT, sessionId: string) => {
   
   // Проверяем, что с последней записи прошло минимум 30 секунд
   if (lastRecorded && (now - lastRecorded) < 30000) {
-    return;
+    console.log('⏭️ Пропускаем запись - слишком рано с последнего прослушивания');
+    return false;
   }
 
   try {
+    console.log('📊 Отправляем запрос на запись прослушивания через сессию:', {
+      nftAddress: nft.address,
+      timestamp: now,
+      sessionId: sessionId.slice(0, 20) + '...'
+    });
+
     listenTracker.set(nft.address, now);
     
-    const response = await fetch('/api/session-listens', {
+    // ИСПРАВЛЕНО: Используем правильный URL из baseUrl
+    const response = await fetch(`${backendApi.baseUrl || process.env.BACKEND_URL || 'https://pttrns-backend-ts.vercel.app'}/api/session-listens`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -57,18 +65,24 @@ const recordListenWithSession = async (nft: NFT, sessionId: string) => {
       
       if (response.status === 401) {
         console.error('❌ Сессия истекла при записи прослушивания');
+        return false;
       } else if (response.status === 429) {
         console.warn('⚠️ Превышен лимит запросов на прослушивания');
+        return false;
       } else {
-        console.error('❌ Ошибка при записи прослушивания:', response.status);
+        console.error('❌ Ошибка при записи прослушивания:', response.status, await response.text());
+        return false;
       }
-    } else {
-      const result = await response.json();
-      console.log('✅ Прослушивание записано:', result);
     }
+
+    const result = await response.json();
+    console.log('✅ Прослушивание записано через сессию:', result);
+    return true;
+
   } catch (error) {
-    console.error('❌ Ошибка при записи прослушивания:', error);
+    console.error('❌ Ошибка при записи прослушивания через сессию:', error);
     listenTracker.delete(nft.address);
+    return false;
   }
 };
 
@@ -137,8 +151,16 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
   const actualPlaytimeRef = useRef(0);
   const lastUpdateTimeRef = useRef(0);
 
-  // Функция для записи прослушивания с улучшенной логикой
-  const recordListen = useCallback(async (nft: NFT) => {    
+  // ИСПРАВЛЕННАЯ функция для записи прослушивания с улучшенной логикой
+  const recordListen = useCallback(async (nft: NFT) => {
+    console.log('🎯 Попытка записи прослушивания:', {
+      nftName: nft.metadata?.name,
+      nftAddress: nft.address,
+      hasCollectionAddress: !!nft.collection?.address,
+      hasSessionId: !!nft.sessionId,
+      actualPlaytime: actualPlaytimeRef.current
+    });
+    
     if (!nft.address || !nft.collection?.address) {
       console.warn('❌ Недостаточно данных для записи прослушивания:', {
         hasAddress: !!nft.address,
@@ -150,22 +172,31 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
     const now = Date.now();
     const lastRecorded = listenTracker.get(nft.address);
     
-    if (lastRecorded && (now - lastRecorded) < 30000) {      
+    if (lastRecorded && (now - lastRecorded) < 30000) {
+      console.log('⏭️ Пропускаем запись - слишком рано с последнего прослушивания');
       return;
     }
 
     try {
-      listenTracker.set(nft.address, now);
+      let success = false;
       
       // Используем сессионную запись если есть sessionId, иначе fallback на старую
       if (nft.sessionId) {
-        await recordListenWithSession(nft, nft.sessionId);
+        console.log('📊 Записываем прослушивание через сессию...');
+        success = await recordListenWithSession(nft, nft.sessionId);
       } else {
+        console.log('📊 Записываем прослушивание через старый API...');
         // Fallback на старый метод
-        const success = await backendApi.recordListen(nft.address, nft.collection.address);
-        if (!success) {
-          listenTracker.delete(nft.address);
+        success = await backendApi.recordListen(nft.address, nft.collection.address);
+        if (success) {
+          listenTracker.set(nft.address, now);
         }
+      }
+
+      if (success) {
+        console.log('✅ Прослушивание успешно записано:', nft.metadata?.name);
+      } else {
+        console.warn('⚠️ Не удалось записать прослушивание:', nft.metadata?.name);
       }
     } catch (error) {
       console.error('❌ Ошибка при записи прослушивания:', error);
@@ -283,6 +314,12 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
 
   // Основная функция воспроизведения (ОБНОВЛЕНА)
   const playNft = async (nft: NFT, nfts: NFT[] = []) => {    
+    console.log('🎵 Начинаем воспроизведение NFT:', {
+      name: nft.metadata?.name,
+      address: nft.address,
+      hasSessionId: !!nft.sessionId,
+      playlistLength: nfts.length
+    });
     
     // Сбрасываем все счетчики для НОВОГО трека
     listenRecordedRef.current = false;
@@ -385,11 +422,24 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
           }
         }, { once: true });
 
+        audioRef.current.addEventListener('canplay', () => {
+          // Автоматически начинаем воспроизведение когда аудио готово
+          if (audioRef.current && audioRef.current.paused) {
+            console.log('🎵 Автоматически начинаем воспроизведение...');
+            audioRef.current.play().catch(error => {
+              console.error('❌ Ошибка автоматического воспроизведения:', error);
+              setIsLoadingTrack(false);
+              setIsPlaying(false);
+            });
+          }
+        }, { once: true });
+
         audioRef.current.addEventListener('playing', () => {          
+          console.log('🎵 Аудио начало воспроизведение');
           setIsLoadingTrack(false);
           setIsPlaying(true);
           actualPlaytimeRef.current = 0;
-          lastUpdateTimeRef.current = Date.now();
+          lastUpdateTimeRef.current = Date.now(); // ИСПРАВЛЕНО: Правильная инициализация времени
           startProgressTimer();
         }, { once: true });
         
@@ -400,16 +450,15 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
 
         const playPromise = audioRef.current.play();
         if (playPromise !== undefined) {
-          await playPromise;
-          setTimeout(() => {
-            if (audioRef.current && !audioRef.current.paused) {
+          playPromise
+            .then(() => {
+              console.log('✅ Воспроизведение началось успешно');
+            })
+            .catch(error => {
+              console.error('❌ Ошибка начала воспроизведения:', error);
               setIsLoadingTrack(false);
-              setIsPlaying(true);
-              actualPlaytimeRef.current = 0;
-              lastUpdateTimeRef.current = Date.now();
-              startProgressTimer();
-            }
-          }, 100);
+              setIsPlaying(false);
+            });
         }
       } catch (error) {
         console.error('❌ Ошибка воспроизведения:', error);
@@ -424,23 +473,41 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
     }
   };
 
+  // ИСПРАВЛЕННАЯ функция таймера прогресса с улучшенной логикой записи прослушиваний
   const startProgressTimer = useCallback(() => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
     }
     
+    // ИСПРАВЛЕНО: Устанавливаем начальное время для корректного подсчета
+    lastUpdateTimeRef.current = Date.now();
+    
     intervalRef.current = setInterval(() => {
+      const now = Date.now();
+      
       if (!audioRef.current) {
+        // Fallback логика без реального аудио элемента
         setCurrentTime(prev => {
           const newTime = prev + 1;
           
           if (isPlaying) {
             actualPlaytimeRef.current += 1;
+            lastUpdateTimeRef.current = now; // Обновляем время
           }
           
-          const listenThreshold = Math.min(30, duration * 0.8);
+          const listenThreshold = Math.max(15, Math.min(30, duration * 0.5));
+          
+          console.log('⏱️ Прогресс воспроизведения (fallback):', {
+            currentTime: newTime,
+            duration,
+            actualPlaytime: actualPlaytimeRef.current,
+            listenThreshold,
+            listenRecorded: listenRecordedRef.current,
+            nftName: currentNft?.metadata?.name
+          });
           
           if (actualPlaytimeRef.current >= listenThreshold && !listenRecordedRef.current && currentNft) {
+            console.log('🎯 Достигнут порог прослушивания (fallback), записываем...');
             const nftToRecord = { ...currentNft };
             listenRecordedRef.current = true;
             recordListen(nftToRecord);
@@ -458,26 +525,63 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
 
       const actualTime = audioRef.current.currentTime;
       const actualDuration = audioRef.current.duration || duration;
+      const isPaused = audioRef.current.paused;
       
-      if (!audioRef.current.paused && isPlaying) {
-        const now = Date.now();
+      // ИСПРАВЛЕНО: Используем реальное состояние аудио, а не состояние React
+      const isReallyPlaying = !isPaused && !audioRef.current.ended;
+      
+      // ИСПРАВЛЕНО: Синхронизируем состояние React с реальным состоянием аудио
+      if (isReallyPlaying !== isPlaying) {
+        console.log('🔄 Синхронизируем состояние isPlaying:', {
+          wasPlaying: isPlaying,
+          nowPlaying: isReallyPlaying,
+          isPaused,
+          ended: audioRef.current.ended
+        });
+        setIsPlaying(isReallyPlaying);
+      }
+      
+      // ИСПРАВЛЕНО: Улучшенная логика подсчета времени прослушивания
+      if (isReallyPlaying) {
         if (lastUpdateTimeRef.current > 0) {
           const deltaSeconds = (now - lastUpdateTimeRef.current) / 1000;
-          actualPlaytimeRef.current += Math.min(deltaSeconds, 1.2);
+          // Ограничиваем дельту разумными пределами (не более 2 секунд)
+          const validDelta = Math.min(Math.max(deltaSeconds, 0), 2);
+          actualPlaytimeRef.current += validDelta;
         }
+        lastUpdateTimeRef.current = now;
+      } else {
+        // Если пауза или не играет, просто обновляем время без добавления к счетчику
         lastUpdateTimeRef.current = now;
       }
       
-      const listenThreshold = Math.min(30, actualDuration * 0.8);
+      const listenThreshold = Math.max(15, Math.min(30, actualDuration * 0.5));
       
-      if (actualPlaytimeRef.current >= listenThreshold && !listenRecordedRef.current && currentNft) {       
+      console.log('⏱️ Прогресс воспроизведения (реальное аудио):', {
+        actualTime: Math.round(actualTime * 100) / 100,
+        actualDuration: Math.round(actualDuration * 100) / 100,
+        actualPlaytime: Math.round(actualPlaytimeRef.current * 100) / 100,
+        listenThreshold: Math.round(listenThreshold * 100) / 100,
+        listenRecorded: listenRecordedRef.current,
+        isPlaying,
+        isPaused,
+        isReallyPlaying,
+        nftName: currentNft?.metadata?.name
+      });
+      
+      // Записываем прослушивание при достижении порога
+      if (actualPlaytimeRef.current >= listenThreshold && !listenRecordedRef.current && currentNft) {
+        console.log('🎯 Достигнут порог прослушивания (реальное аудио), записываем...');
         const nftToRecord = { ...currentNft };
         listenRecordedRef.current = true;
         recordListen(nftToRecord);
       }
       
+      // Переключаем на следующий трек в конце
       if (actualTime >= actualDuration - 0.5) {
-        if (!listenRecordedRef.current && currentNft && actualPlaytimeRef.current >= actualDuration * 0.5) {         
+        // Записываем прослушивание в конце если еще не записали и прослушали достаточно
+        if (!listenRecordedRef.current && currentNft && actualPlaytimeRef.current >= Math.max(10, actualDuration * 0.3)) {
+          console.log('🎯 Записываем прослушивание в конце трека...');
           const nftToRecord = { ...currentNft };
           listenRecordedRef.current = true;
           recordListen(nftToRecord);
@@ -487,7 +591,8 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
         return;
       }
       
-      if (!audioRef.current.paused) {
+      // Обновляем UI только если трек не на паузе
+      if (!isPaused) {
         setCurrentTime(actualTime);
         setProgress((actualTime / actualDuration) * 100);
         
@@ -509,7 +614,7 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
       }
-      lastUpdateTimeRef.current = 0;
+      // НЕ сбрасываем lastUpdateTimeRef.current при паузе
     } else {
       setIsPlaying(true);
       if (audioRef.current) {
@@ -518,7 +623,7 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
           setIsPlaying(false);
         });
       }
-      lastUpdateTimeRef.current = now;
+      lastUpdateTimeRef.current = now; // ИСПРАВЛЕНО: Устанавливаем время при возобновлении
       startProgressTimer();
     }
   }, [isPlaying, startProgressTimer]);
@@ -681,11 +786,23 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
           }
         }, { once: true });
         
+        audioRef.current.addEventListener('canplay', () => {
+          if (audioRef.current && audioRef.current.paused) {
+            console.log('🎵 Автоматически начинаем воспроизведение следующего трека...');
+            audioRef.current.play().catch(error => {
+              console.error('❌ Ошибка автоматического воспроизведения следующего трека:', error);
+              setIsLoadingTrack(false);
+              setIsPlaying(false);
+            });
+          }
+        }, { once: true });
+        
         audioRef.current.addEventListener('playing', () => {          
+          console.log('🎵 Следующий трек начал воспроизведение');
           setIsLoadingTrack(false);
           setIsPlaying(true);
           actualPlaytimeRef.current = 0;
-          lastUpdateTimeRef.current = Date.now();
+          lastUpdateTimeRef.current = Date.now(); // ИСПРАВЛЕНО
           startProgressTimer();
         }, { once: true });
         
@@ -696,16 +813,15 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
         
         const playPromise = audioRef.current.play();
         if (playPromise !== undefined) {
-          await playPromise;
-          setTimeout(() => {
-            if (audioRef.current && !audioRef.current.paused) {
+          playPromise
+            .then(() => {
+              console.log('✅ Следующий трек начал воспроизведение успешно');
+            })
+            .catch(error => {
+              console.error('❌ Ошибка воспроизведения следующего трека:', error);
               setIsLoadingTrack(false);
-              setIsPlaying(true);
-              actualPlaytimeRef.current = 0;
-              lastUpdateTimeRef.current = Date.now();
-              startProgressTimer();
-            }
-          }, 100);
+              setIsPlaying(false);
+            });
         }
       }
       
@@ -851,11 +967,23 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
           }
         }, { once: true });
         
+        audioRef.current.addEventListener('canplay', () => {
+          if (audioRef.current && audioRef.current.paused) {
+            console.log('🎵 Автоматически начинаем воспроизведение предыдущего трека...');
+            audioRef.current.play().catch(error => {
+              console.error('❌ Ошибка автоматического воспроизведения предыдущего трека:', error);
+              setIsLoadingTrack(false);
+              setIsPlaying(false);
+            });
+          }
+        }, { once: true });
+        
         audioRef.current.addEventListener('playing', () => {         
+          console.log('🎵 Предыдущий трек начал воспроизведение');
           setIsLoadingTrack(false);
           setIsPlaying(true);
           actualPlaytimeRef.current = 0;
-          lastUpdateTimeRef.current = Date.now();
+          lastUpdateTimeRef.current = Date.now(); // ИСПРАВЛЕНО
           startProgressTimer();
         }, { once: true });
         
@@ -866,16 +994,15 @@ export function PlayerProvider({ children }: PlayerProviderProps) {
         
         const playPromise = audioRef.current.play();
         if (playPromise !== undefined) {
-          await playPromise;
-          setTimeout(() => {
-            if (audioRef.current && !audioRef.current.paused) {
+          playPromise
+            .then(() => {
+              console.log('✅ Предыдущий трек начал воспроизведение успешно');
+            })
+            .catch(error => {
+              console.error('❌ Ошибка воспроизведения предыдущего трека:', error);
               setIsLoadingTrack(false);
-              setIsPlaying(true);
-              actualPlaytimeRef.current = 0;
-              lastUpdateTimeRef.current = Date.now();
-              startProgressTimer();
-            }
-          }, 100);
+              setIsPlaying(false);
+            });
         }
       }
       

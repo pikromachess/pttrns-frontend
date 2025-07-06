@@ -28,7 +28,7 @@ export const UpperBar = forwardRef<HTMLDivElement | null, UpperBarProps>(({
   tonConnectButtonRef,
 }, ref) => {
   const isTelegram = !!(window.Telegram && window.Telegram.WebApp);
-  const telegramAvatar = isTelegram && window.Telegram.WebApp.initDataUnsafe?.user?.photo_url;
+  const telegramAvatar = isTelegram && window.Telegram.WebApp.initDataUnsafe?.user?.photo_url;  
 
   return (
     <div className="upper-bar" ref={ref}>
