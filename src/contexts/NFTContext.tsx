@@ -127,36 +127,38 @@ export function NFTProvider({ children }: NFTProviderProps): JSX.Element {
     const detectedNetwork = getWalletNetwork(chain);
     const cacheKey = `${walletAddress}-${detectedNetwork}`;
     
-    // Проверяем, изменился ли кошелек
-    if (lastWalletAddress === walletAddress && network === detectedNetwork) {
-      // Кошелек тот же, проверяем кеш
-      if (cache.current.has(cacheKey)) {
-        const cachedNfts = cache.current.get(cacheKey);
-        if (cachedNfts) {
-          setNfts(cachedNfts);
-        }
-        setLoading(false);
-        setError(null);
-        return;
-      }
-    }
+    console.log('🔍 loadNftsForWallet вызван:', {
+      walletAddress,
+      chain,
+      detectedNetwork,
+      lastWalletAddress,
+      currentNetwork: network,
+      hasToken: !!token,
+      cacheKey,
+      hasCachedData: cache.current.has(cacheKey)
+    });
     
-    // Обновляем состояние
+    // ИСПРАВЛЕНИЕ: Обновляем состояние сразу
     setNetwork(detectedNetwork);
     setLastWalletAddress(walletAddress);
     
-    // Загружаем NFT только если нет в кеше
-    if (!cache.current.has(cacheKey)) {
+    // ИСПРАВЛЕНИЕ: Всегда загружаем данные при смене кошелька
+    const walletChanged = lastWalletAddress !== walletAddress || network !== detectedNetwork;
+    
+    if (walletChanged || !cache.current.has(cacheKey)) {
+      console.log('🔄 Загружаем NFT - кошелек изменился или нет кеша');
       await fetchNfts(walletAddress, detectedNetwork);
     } else {
+      // Используем кешированные данные
       const cachedNfts = cache.current.get(cacheKey);
       if (cachedNfts) {
+        console.log('📦 Используем кешированные NFT:', cachedNfts.length);
         setNfts(cachedNfts);
       }
       setLoading(false);
       setError(null);
     }
-  }, [token]); 
+  }, [token, lastWalletAddress, network]);
 
   const value: NFTContextType = {
     nfts,

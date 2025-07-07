@@ -61,19 +61,49 @@ export default function Library() {
       chain: wallet?.account?.chain
     };
     
+    console.log('👛 Отслеживание изменений кошелька:', {
+      previousAddress: prevWalletRef.current.address,
+      currentAddress: currentWallet.address,
+      previousChain: prevWalletRef.current.chain,
+      currentChain: currentWallet.chain,
+      hasToken: !!token
+    });
+    
     // Проверяем, изменились ли данные кошелька
     const walletChanged = 
       prevWalletRef.current.address !== currentWallet.address ||
       prevWalletRef.current.chain !== currentWallet.chain;
     
     if (walletChanged) {      
+      console.log('🔄 Кошелек изменился, обновляем данные...');
       prevWalletRef.current = currentWallet;
       
       if (currentWallet.address && currentWallet.chain && token) {
+        console.log('📡 Загружаем NFT для нового кошелька...');
         loadNftsForWallet(currentWallet.address, currentWallet.chain);
+      } else if (!currentWallet.address || !currentWallet.chain) {
+        console.log('🗑️ Кошелек отключен, очищаем NFT...');
+        // Очищаем NFT при отключении кошелька
+        // Это можно сделать через контекст NFT
       }
+    } else if (currentWallet.address && currentWallet.chain && token && !loading && nfts.length === 0) {
+      // ИСПРАВЛЕНИЕ: Если кошелек не изменился, но NFT не загружены и нет процесса загрузки
+      console.log('🔄 NFT не загружены при наличии кошелька и токена, принудительно загружаем...');
+      loadNftsForWallet(currentWallet.address, currentWallet.chain);
     }
-  }, [wallet?.account?.address, wallet?.account?.chain, token, loadNftsForWallet]);
+  }, [wallet?.account?.address, wallet?.account?.chain, token, loadNftsForWallet, loading, nfts.length]);
+
+  useEffect(() => {
+    console.log('📊 Состояние Library компонента:', {
+      hasWallet: !!wallet,
+      walletAddress: wallet?.account?.address,
+      hasToken: !!token,
+      nftsCount: nfts.length,
+      loading,
+      error,
+      network
+    });
+  }, [wallet, token, nfts.length, loading, error, network]);
 
   // Рендер основного контента
   const renderMainContent = () => {

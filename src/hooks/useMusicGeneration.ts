@@ -185,50 +185,13 @@ export function useMusicGeneration() {
     }
   }, [tonConnectUI, hasActiveSession, sessionId, musicServerUrl, setSessionData]);
 
-  // Функция для обработки подтверждения создания сессии
-  const handleSessionWarningConfirm = useCallback(async () => {
-    setShowSessionWarning(false);
-    
-    if (!pendingNft) return;
-    
-    try {
-      // Создаем сессию
-      const sessionData = await createListeningSession();
-      
-      if (sessionData) {
-        // Сессия создана успешно, но НЕ запускаем воспроизведение автоматически
-        console.log('✅ Сессия создана. Для воспроизведения нажмите на трек еще раз.');
-        
-        // Показываем уведомление пользователю
-        showToast('Сессия создана! Теперь можно воспроизводить музыку', 'success', 4000);
-        
-        if (window.Telegram?.WebApp?.HapticFeedback) {
-          window.Telegram.WebApp.HapticFeedback.notificationOccurred('success');
-        }
-      }
-    } catch (error) {
-      console.error('❌ Ошибка при создании сессии:', error);
-    } finally {
-      setPendingNft(null);
-    }
-  }, [pendingNft, createListeningSession]);
-
-  // Функция для обработки отмены создания сессии
-  const handleSessionWarningCancel = useCallback(() => {
-    setShowSessionWarning(false);
-    setPendingNft(null);
-    
-    if (window.Telegram?.WebApp?.HapticFeedback) {
-      window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
-    }
-  }, []);
-
   // Основная функция генерации музыки
   const generateMusicForNft = useCallback(async (selectedNft: NFT, allNfts: NFT[]) => {
     const nftId = selectedNft.address || `${selectedNft.index}`;
     
     // Проверяем, не генерируется ли уже музыка для этого NFT
     if (generatingMusic === nftId || isCreatingSession) {
+      console.log('🔄 Генерация уже в процессе:', { generatingMusic, isCreatingSession });
       return;
     }
 
@@ -259,6 +222,7 @@ export function useMusicGeneration() {
       );
       if (nftWithCollection) {
         nftToPlay = { ...nftToPlay, collection: nftWithCollection.collection };
+        console.log('✅ Найдена коллекция в плейлисте:', nftWithCollection.collection);
       } else {
         console.error('❌ Не удалось найти информацию о коллекции для NFT');
         alert('Ошибка: отсутствует информация о коллекции NFT');
@@ -284,16 +248,34 @@ export function useMusicGeneration() {
         musicServerUrl
       };
 
-      // ИСПРАВЛЕНО: Обогащаем ВСЕ NFT в плейлисте сессионными данными
-      const enrichedPlaylist = allNfts.map(playlistNft => ({
-        ...playlistNft,
-        sessionId: sessionDataToUse.sessionId,
+      console.log('🔍 Используем сессионные данные:', {
+        sessionId: sessionDataToUse.sessionId.slice(0, 20) + '...',
         musicServerUrl: sessionDataToUse.musicServerUrl,
-        // Если у NFT в плейлисте нет коллекции, но мы знаем коллекцию из контекста
-        collection: playlistNft.collection?.address 
-          ? playlistNft.collection 
-          : (nftToPlay.collection?.address ? nftToPlay.collection : playlistNft.collection)
-      }));
+        nftToPlay: nftToPlay.metadata?.name,
+        playlistLength: allNfts.length
+      });
+
+      // ИСПРАВЛЕНИЕ: Более надежное обогащение плейлиста
+      const enrichedPlaylist = allNfts.map(playlistNft => {
+        const enrichedNft = {
+          ...playlistNft,
+          sessionId: sessionDataToUse.sessionId,
+          musicServerUrl: sessionDataToUse.musicServerUrl,
+          collection: playlistNft.collection?.address 
+            ? playlistNft.collection 
+            : (nftToPlay.collection?.address ? nftToPlay.collection : playlistNft.collection)
+        };
+        
+        console.log('🔧 Обогащаем NFT в плейлисте:', {
+          name: enrichedNft.metadata?.name,
+          hasSessionId: !!enrichedNft.sessionId,
+          hasMusicServerUrl: !!enrichedNft.musicServerUrl,
+          hasCollection: !!enrichedNft.collection?.address,
+          collectionName: enrichedNft.collection?.name
+        });
+        
+        return enrichedNft;
+      });
       
       // Обогащаем выбранный NFT
       const enrichedNft = {
@@ -302,33 +284,16 @@ export function useMusicGeneration() {
         musicServerUrl: sessionDataToUse.musicServerUrl
       };
       
-      // Формируем плейлист: начиная с выбранного трека
-      const selectedIndex = enrichedPlaylist.findIndex(item => 
-        item.address === nftToPlay.address || 
-        (item.index === nftToPlay.index && !item.address && !nftToPlay.address)
-      );
-      
-      let orderedPlaylist: NFT[];
-      if (selectedIndex !== -1) {
-        // Создаем плейлист начиная с выбранного трека
-        orderedPlaylist = [
-          ...enrichedPlaylist.slice(selectedIndex), // от выбранного до конца
-          ...enrichedPlaylist.slice(0, selectedIndex) // от начала до выбранного
-        ];
-      } else {
-        // Если трек не найден, просто используем весь список
-        orderedPlaylist = enrichedPlaylist;
-      }
-      
-      console.log('🎵 Запускаем воспроизведение с сессионными данными:', {
+      console.log('🎵 Запускаем воспроизведение с обогащенным плейлистом:', {
         selectedNft: enrichedNft.metadata?.name,
         sessionId: sessionDataToUse.sessionId.slice(0, 20) + '...',
-        playlistLength: orderedPlaylist.length,
-        playlistWithSession: orderedPlaylist.every(nft => nft.sessionId && nft.musicServerUrl)
+        playlistLength: enrichedPlaylist.length,
+        playlistWithSession: enrichedPlaylist.filter(nft => nft.sessionId && nft.musicServerUrl).length,
+        allHaveCollection: enrichedPlaylist.every(nft => nft.collection?.address)
       });
       
       // Запускаем воспроизведение с правильным плейлистом
-      await playNft(enrichedNft, orderedPlaylist);
+      await playNft(enrichedNft, enrichedPlaylist);
       
     } catch (error) {
       console.error('❌ Ошибка генерации музыки:', error);
@@ -339,22 +304,70 @@ export function useMusicGeneration() {
           clearSession();
           setPendingNft({ nft: selectedNft, allNfts });
           setShowSessionWarning(true);
+          showToast('Сессия истекла. Создайте новую сессию.', 'error');
         } else if (error.message.includes('401') || error.message.includes('Authentication required')) {
           // Проблема с аутентификацией
           clearSession();
-          alert('Ошибка аутентификации. Пожалуйста, создайте сессию заново.');
+          showToast('Ошибка аутентификации. Пожалуйста, создайте сессию заново.', 'error');
         } else if (error.message.includes('503') || error.message.includes('недоступен')) {
-          alert('Сервис генерации музыки временно недоступен. Попробуйте позже.');
+          showToast('Сервис генерации музыки временно недоступен. Попробуйте позже.', 'error');
         } else {
-          alert(`Ошибка при генерации музыки: ${error.message}`);
+          showToast(`Ошибка при генерации музыки: ${error.message}`, 'error');
         }
       } else {
-        alert('Неизвестная ошибка при генерации музыки');
+        showToast('Неизвестная ошибка при генерации музыки', 'error');
       }
     } finally {
       setGeneratingMusic(null);
     }
-  }, [playNft, generatingMusic, isCreatingSession, getNftCacheKey, hasValidSession, sessionId, musicServerUrl, clearSession]);
+  }, [playNft, generatingMusic, isCreatingSession, getNftCacheKey, hasValidSession, sessionId, musicServerUrl, clearSession, showToast]);
+
+  // Функция для обработки подтверждения создания сессии
+  const handleSessionWarningConfirm = useCallback(async () => {
+    setShowSessionWarning(false);
+    
+    if (!pendingNft) return;
+    
+    try {
+      // Создаем сессию
+      const sessionData = await createListeningSession();
+      
+      if (sessionData) {
+        console.log('✅ Сессия создана успешно. Автоматически запускаем воспроизведение...');
+        
+        // Показываем уведомление пользователю
+        showToast('Сессия создана! Запускаем воспроизведение...', 'success', 3000);
+        
+        // ИСПРАВЛЕНИЕ: Автоматически запускаем воспроизведение
+        setTimeout(async () => {
+          if (pendingNft) {
+            await generateMusicForNft(pendingNft.nft, pendingNft.allNfts);
+          }
+        }, 500); // Небольшая задержка для показа toast
+        
+        if (window.Telegram?.WebApp?.HapticFeedback) {
+          window.Telegram.WebApp.HapticFeedback.notificationOccurred('success');
+        }
+      }
+    } catch (error) {
+      console.error('❌ Ошибка при создании сессии:', error);
+      showToast('Ошибка создания сессии. Попробуйте еще раз.', 'error');
+    } finally {
+      setPendingNft(null);
+    }
+  }, [pendingNft, createListeningSession, generateMusicForNft, showToast]);
+
+  // Функция для обработки отмены создания сессии
+  const handleSessionWarningCancel = useCallback(() => {
+    setShowSessionWarning(false);
+    setPendingNft(null);
+    
+    if (window.Telegram?.WebApp?.HapticFeedback) {
+      window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
+    }
+  }, []);
+
+  
 
   const handleNftClick = useCallback((nft: NFT, allNfts: NFT[]) => {
     generateMusicForNft(nft, allNfts);
