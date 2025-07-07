@@ -14,8 +14,6 @@ import {
   safeParseJson
 } from '../utils/debugUtils';
 
-// Убираем локальный кеш - теперь используем глобальный контекст
-
 export function useMusicGeneration() {
   const { playNft } = usePlayer();  
   const [tonConnectUI] = useTonConnectUI();
@@ -333,17 +331,11 @@ export function useMusicGeneration() {
       const sessionData = await createListeningSession();
       
       if (sessionData) {
-        console.log('✅ Сессия создана успешно. Автоматически запускаем воспроизведение...');
+        console.log('✅ Сессия создана успешно. Готова к использованию.');
         
-        // Показываем уведомление пользователю
-        showToast('Сессия создана! Запускаем воспроизведение...', 'success', 3000);
-        
-        // ИСПРАВЛЕНИЕ: Автоматически запускаем воспроизведение
-        setTimeout(async () => {
-          if (pendingNft) {
-            await generateMusicForNft(pendingNft.nft, pendingNft.allNfts);
-          }
-        }, 500); // Небольшая задержка для показа toast
+        // ИСПРАВЛЕНИЕ: Убираем автоматический запуск воспроизведения
+        // Показываем уведомление пользователю о том, что сессия готова
+        showToast('Сессия создана! Теперь вы можете прослушивать NFT.', 'success', 4000);
         
         if (window.Telegram?.WebApp?.HapticFeedback) {
           window.Telegram.WebApp.HapticFeedback.notificationOccurred('success');
@@ -353,9 +345,10 @@ export function useMusicGeneration() {
       console.error('❌ Ошибка при создании сессии:', error);
       showToast('Ошибка создания сессии. Попробуйте еще раз.', 'error');
     } finally {
+      // ИСПРАВЛЕНИЕ: Очищаем pendingNft без автозапуска
       setPendingNft(null);
     }
-  }, [pendingNft, createListeningSession, generateMusicForNft, showToast]);
+  }, [pendingNft, createListeningSession, showToast]);
 
   // Функция для обработки отмены создания сессии
   const handleSessionWarningCancel = useCallback(() => {
@@ -366,8 +359,6 @@ export function useMusicGeneration() {
       window.Telegram.WebApp.HapticFeedback.impactOccurred('light');
     }
   }, []);
-
-  
 
   const handleNftClick = useCallback((nft: NFT, allNfts: NFT[]) => {
     generateMusicForNft(nft, allNfts);
